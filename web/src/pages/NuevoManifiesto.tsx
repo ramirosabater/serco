@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, hoy } from '../lib/formato'
-import type { UM } from '../lib/tipos'
+import type { Instrucciones, UM } from '../lib/tipos'
+import { INSTRUCTIVOS, instruccionesPorDefecto, NIVELES, PELIGROS } from '../lib/instrucciones'
 import { useAuth } from '../auth/AuthProvider'
 
 interface Transp { id: number; nombre: string; emite_manifiestos: boolean }
-interface Gen { id: number; nombre: string; cuit: string | null; generador_principal_id: number | null }
+interface Gen { id: number; nombre: string; cuit: string | null; generador_principal_id: number | null; hab_mun_vto: string | null; actividad: string | null }
 interface Flota { id: number; nombre: string; activo: boolean; vtos: (string | null)[] }
 interface Corriente { id: number; codigo: string; descripcion: string | null; um: UM | null }
 interface Renglon { corriente_id: string; contenedor: string; cantidad: string; um: UM }
@@ -52,6 +53,8 @@ export default function NuevoManifiesto() {
   const [motivo, setMotivo] = useState('')
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [instr, setInstr] = useState<Instrucciones>(() => instruccionesPorDefecto({}))
+  const [imprimir, setImprimir] = useState(false)
 
   const generador = useMemo(() => generadores.find((g) => g.nombre === genTexto) ?? null, [generadores, genTexto])
   const transp = transportistas.find((t) => String(t.id) === transportista)
@@ -66,12 +69,14 @@ export default function NuevoManifiesto() {
         const serco = l.find((t) => t.nombre === 'SERCO AMBIENTAL SA') ?? l.find((t) => t.emite_manifiestos)
         if (serco) setTransportista(String(serco.id))
       })
-    traerTodo<Gen>(() => supabase.from('generadores').select('id, nombre, cuit, generador_principal_id').eq('activo', true).order('nombre'))
+    traerTodo<Gen>(() => supabase.from('generadores').select('id, nombre, cuit, generador_principal_id, hab_mun_vto, actividad').eq('activo', true).order('nombre'))
       .then(({ data }) => setGeneradores(data))
     supabase.from('generadores_principales').select('id, nombre').eq('activo', true).order('nombre')
       .then(({ data }) => setPlantas(data ?? []))
     supabase.from('corrientes').select('id, codigo, descripcion, um').eq('activa', true).order('codigo')
       .then(({ data }) => setCorrientes((data ?? []) as Corriente[]))
+    supabase.from('parametros').select('clave, valor').like('clave', 'form_%')
+      .then(({ data }) => setInstr(instruccionesPorDefecto(Object.fromEntries((data ?? []).map((x) => [x.clave, x.valor])))))
   }, [])
 
   // Al cambiar de transportista: número sugerido, choferes y camiones
@@ -118,13 +123,14 @@ export default function NuevoManifiesto() {
         generador_principal_id: planta ? Number(planta) : null, direccion_retiro: direccion || null,
         chofer_id: chofer ? Number(chofer) : null, camion_id: camion ? Number(camion) : null, nota: nota || null,
         validacion_omitida: problemas.length && forzar ? motivo.trim() : null,
+        instrucciones: esAzul ? instr : null,
         items: items.map((r) => ({ corriente_id: Number(r.corriente_id), contenedor: r.contenedor || null, cantidad: Number(r.cantidad.replace(',', '.')), um: r.um })),
       },
     })
     setEnviando(false)
     if (error) { setError(mensajeError(error)); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
     const r = data as { id: number; aviso: string | null }
-    nav(`/manifiestos/${r.id}`, { state: { emitido: true, aviso: r.aviso } })
+    nav(imprimir && esAzul ? `/manifiestos/${r.id}/imprimir` : `/manifiestos/${r.id}`, { state: { emitido: true, aviso: r.aviso } })
   }
 
   if (!puedeEditar) return <p className="aviso haz">Tu usuario es de consulta: no puede emitir manifiestos.</p>
@@ -136,7 +142,7 @@ export default function NuevoManifiesto() {
       <p className="sub">{esAzul ? 'Se imprime sobre el formulario azul. A mano queda solo la firma.' : 'Manifiesto de otro transportista (formulario rosa): se registra con el número de su formulario.'}</p>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 14 }}>{error}</div>}
 
-      <div className="card stack">
+      <div className="card stack" data-ayuda="nm-formulario">
         <h2 style={{ margin: 0 }}>Formulario y retiro</h2>
         <div className="campos">
           <label className="campo">Transportista
@@ -144,7 +150,7 @@ export default function NuevoManifiesto() {
               {transportistas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </label>
-          <label className="campo">Número del formulario
+          <label className="campo" data-ayuda="nm-numero">Número del formulario
             <input value={numero} onChange={(e) => setNumero(e.target.value)} inputMode="numeric" required pattern="[\d\s-]{9,12}" placeholder="837007470" />
             <span className="ayuda">{sugerido ? `El siguiente es ${fnum(sugerido)}. Revisá que coincida con el papel.` : 'Copialo del formulario.'}</span>
           </label>
@@ -153,10 +159,11 @@ export default function NuevoManifiesto() {
           </label>
         </div>
         <div className="campos">
-          <label className="campo">Generador
+          <label className="campo" data-ayuda="nm-generador">Generador
             <input list="lista-generadores" value={genTexto} onChange={(e) => setGenTexto(e.target.value)} required placeholder="Empezá a escribir el nombre" />
             <datalist id="lista-generadores">{generadores.map((g) => <option key={g.id} value={g.nombre}>{g.cuit ?? ''}</option>)}</datalist>
-            {generador && <span className="ayuda">CUIT {generador.cuit ?? 'sin cargar'}</span>}
+            {generador && <span className="ayuda">CUIT {generador.cuit ?? 'sin cargar'}{generador.actividad ? ` · ${generador.actividad}` : ''}</span>}
+            {generador && <HabGenerador vto={generador.hab_mun_vto} fecha={fecha} />}
           </label>
           <label className="campo">Dirección de retiro
             <input list="lista-direcciones" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder={generador ? 'Elegí o escribí la dirección' : 'Primero elegí el generador'} />
@@ -171,7 +178,7 @@ export default function NuevoManifiesto() {
         </div>
       </div>
 
-      <div className="card stack mt">
+      <div className="card stack mt" data-ayuda="nm-flota">
         <h2 style={{ margin: 0 }}>Camión y chofer</h2>
         <div className="campos">
           <label className="campo">Camión
@@ -200,7 +207,27 @@ export default function NuevoManifiesto() {
         {esAzul && chofer && camion && generador && problemas.length === 0 && <div className="aviso ok" role="status">Camión, chofer, transportista y generador al día para el {fd(fecha)}.</div>}
       </div>
 
-      <div className="card stack mt">
+      {esAzul && <div className="card stack mt" data-ayuda="nm-instrucciones">
+        <h2 style={{ margin: 0 }}>Instrucciones de manipulación</h2>
+        <div className="campos">{(['inhalacion', 'dermica', 'oral'] as const).map((k) => (
+          <label key={k} className="campo">Toxicidad {k === 'inhalacion' ? 'por inhalación' : k === 'dermica' ? 'dérmica' : 'oral'}
+            <select value={instr[k]} onChange={(e) => setInstr({ ...instr, [k]: e.target.value })}>{NIVELES.map((n) => <option key={n}>{n}</option>)}</select>
+          </label>))}
+        </div>
+        <div><div className="muted small" style={{ marginBottom: 6 }}>Sistema de identificación de peligrosidad</div>
+          <div className="tildes">{PELIGROS.map((t, k) => (
+            <label key={t} className="tilde"><input type="checkbox" checked={instr.peligros[k]}
+              onChange={(e) => { const p = [...instr.peligros] as Instrucciones['peligros']; p[k] = e.target.checked; setInstr({ ...instr, peligros: p }) }} /> {t}</label>))}
+          </div></div>
+        <div><div className="muted small" style={{ marginBottom: 6 }}>Instructivos que se adjuntan</div>
+          <div className="tildes">{INSTRUCTIVOS.map((t, k) => (
+            <label key={t} className="tilde"><input type="checkbox" checked={instr.instructivos[k]}
+              onChange={(e) => { const p = [...instr.instructivos] as Instrucciones['instructivos']; p[k] = e.target.checked; setInstr({ ...instr, instructivos: p }) }} /> {t}</label>))}
+          </div></div>
+        <span className="ayuda small muted">Vienen cargadas con los valores de siempre (Configuración → Parámetros). Cambialas solo si este retiro es distinto.</span>
+      </div>}
+
+      <div className="card stack mt" data-ayuda="nm-residuos">
         <h2 style={{ margin: 0 }}>Residuos</h2>
         {renglones.map((r, k) => (
           <div key={k} className="campos" style={{ alignItems: 'end' }}>
@@ -236,8 +263,18 @@ export default function NuevoManifiesto() {
 
       <div className="bar mt" style={{ justifyContent: 'flex-end' }}>
         <Link to="/manifiestos"><button type="button">Cancelar</button></Link>
-        <button className="pri" disabled={enviando || bloqueado}>{enviando ? 'Emitiendo…' : 'Emitir manifiesto'}</button>
+        {esAzul && <button disabled={enviando || bloqueado} onClick={() => setImprimir(false)}>Emitir</button>}
+        <button className="pri" disabled={enviando || bloqueado} data-ayuda="nm-emitir" onClick={() => setImprimir(esAzul)}>{enviando ? 'Emitiendo…' : esAzul ? 'Emitir e imprimir' : 'Registrar manifiesto'}</button>
       </div>
     </form>
   )
+}
+
+/** Habilitación municipal del generador a la fecha del retiro */
+function HabGenerador({ vto, fecha }: { vto: string | null; fecha: string }) {
+  if (!vto) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación municipal sin cargar</span>
+  const dias = Math.round((new Date(vto).getTime() - new Date(fecha).getTime()) / 86400000)
+  if (dias < 0) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vencida el {fd(vto)}</span>
+  if (dias <= 45) return <span className="pill haz" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vence el {fd(vto)}</span>
+  return <span className="pill ok" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vigente hasta el {fd(vto)}</span>
 }

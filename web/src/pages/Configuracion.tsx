@@ -15,6 +15,13 @@ const ROLES: { v: Rol; l: string; d: string }[] = [
   { v: 'cliente', l: 'Cliente (portal)', d: 'Ve solo sus retiros y certificados' },
 ]
 
+const PUEDE: Record<Rol, string> = {
+  admin: 'Todo lo del operador, más usuarios, parámetros, avisos por mail y emitir con vencimientos sin regularizar (queda registrado el motivo).',
+  operador: 'Emitir e imprimir manifiestos y etiquetas, armar viajes a disposición final, registrar certificados, cargar altas y vencimientos.',
+  consulta: 'Ver todo y sacar reportes y libros. No cambia nada.',
+  cliente: 'Entra al portal: ve sus propios retiros, en qué etapa están y descarga sus certificados.',
+}
+
 /** Busca generadores por nombre o CUIT y los agrega a una lista */
 function ElegirGeneradores({ elegidos, setElegidos }: { elegidos: Gen[]; setElegidos: (g: Gen[]) => void }) {
   const [q, setQ] = useState('')
@@ -49,10 +56,21 @@ function Usuarios() {
   const [enviando, setEnviando] = useState(false)
   const [editando, setEditando] = useState<string | null>(null)
   const [gensEdit, setGensEdit] = useState<Gen[]>([])
+  const [ingresos, setIngresos] = useState<Record<string, string | null>>({})
 
   const cargar = () => supabase.from('perfiles').select('id, nombre, email, rol, activo, perfil_generadores(generador_id, generadores(nombre))').order('nombre')
     .then(({ data, error }) => { setError(mensajeError(error)); setLista((data ?? []) as unknown as PerfilFila[]) })
-  useEffect(() => { cargar() }, [])
+  useEffect(() => {
+    cargar()
+    supabase.rpc('ultimos_ingresos').then(({ data }) => setIngresos(Object.fromEntries(((data ?? []) as { id: string; ultimo: string | null }[]).map((x) => [x.id, x.ultimo]))))
+  }, [])
+
+  async function restablecer(p: PerfilFila) {
+    if (!p.email) return
+    setError(''); setOk('')
+    const { error } = await supabase.auth.resetPasswordForEmail(p.email, { redirectTo: window.location.origin + '/elegir-clave' })
+    if (error) setError(mensajeError(error)); else setOk(`Le mandamos a ${p.email} un mail para elegir una contraseña nueva.`)
+  }
 
   async function invitar(e: FormEvent) {
     e.preventDefault(); setError(''); setOk(''); setEnviando(true)
@@ -88,7 +106,7 @@ function Usuarios() {
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
       {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok}</div>}
       <div className="tw"><table>
-        <thead><tr><th>Nombre</th><th>Mail</th><th>Rol</th><th>Generadores (portal)</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Mail</th><th>Rol</th><th>Generadores (portal)</th><th>Último ingreso</th><th>Estado</th></tr></thead>
         <tbody>{lista.map((p) => (
           <tr key={p.id}>
             <td><b>{p.nombre}</b></td><td>{p.email ?? '—'}</td>
@@ -100,22 +118,31 @@ function Usuarios() {
               <>{p.perfil_generadores.map((x) => x.generadores?.nombre).join(', ') || <span className="muted">ninguno</span>}{' '}
                 <button type="button" className="link" onClick={() => { setEditando(p.id); setGensEdit(p.perfil_generadores.map((x) => ({ id: x.generador_id, nombre: x.generadores?.nombre ?? '', cuit: null }))) }}>Cambiar</button></>)}
             </td>
-            <td>{p.activo ? <button type="button" onClick={() => cambiar(p, { activo: false })}>Dar de baja</button>
+            <td className="nw small">{ingresos[p.id] ? new Date(ingresos[p.id]!).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : <span className="muted">Nunca</span>}</td>
+            <td className="nw">{p.activo ? <>{p.email && <button type="button" className="link" onClick={() => restablecer(p)} style={{ marginRight: 10 }}>Restablecer contraseña</button>}<button type="button" onClick={() => cambiar(p, { activo: false })}>Dar de baja</button></>
               : <><span className="pill bad">Sin acceso</span> <button type="button" className="link" onClick={() => cambiar(p, { activo: true })}>Reactivar</button></>}</td>
           </tr>))}
         </tbody>
       </table></div>
 
-      <form className="stack mt" onSubmit={invitar}>
+      <details className="mt roles">
+        <summary>Qué puede hacer cada rol</summary>
+        <div className="tw"><table className="compacta">
+          <thead><tr><th>Rol</th><th>Puede</th></tr></thead>
+          <tbody>{ROLES.map((r) => <tr key={r.v}><td className="nw"><b>{r.l}</b></td><td>{PUEDE[r.v]}</td></tr>)}</tbody>
+        </table></div>
+      </details>
+
+      <form className="stack mt" onSubmit={invitar} data-ayuda="cfg-invitar">
         <h2 style={{ margin: 0 }}>Invitar a alguien</h2>
         <div className="campos">
           <label className="campo">Mail<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></label>
           <label className="campo">Nombre<input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required /></label>
-          <label className="campo">Rol<select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>{ROLES.map((r) => <option key={r.v} value={r.v}>{r.l}</option>)}</select>
+          <label className="campo" data-ayuda="cfg-rol">Rol<select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })}>{ROLES.map((r) => <option key={r.v} value={r.v}>{r.l}</option>)}</select>
             <span className="ayuda">{ROLES.find((r) => r.v === form.rol)?.d}</span></label>
         </div>
         {form.rol === 'cliente' && <label className="campo">Generadores que va a ver<ElegirGeneradores elegidos={gens} setElegidos={setGens} /></label>}
-        <div><button className="pri" disabled={enviando}>{enviando ? 'Invitando…' : 'Mandar invitación'}</button>
+        <div><button className="pri" data-ayuda="cfg-enviar" disabled={enviando}>{enviando ? 'Invitando…' : 'Mandar invitación'}</button>
           <span className="muted small"> Le llega un mail para elegir su contraseña.</span></div>
       </form>
     </div>
@@ -167,16 +194,22 @@ function Avisos() {
   )
 }
 
-const PARAMS: Record<string, { l: string; tipo: 'texto' | 'numero' | 'sino' }> = {
+const PARAMS: Record<string, { l: string; tipo: 'texto' | 'numero' | 'sino'; op?: [string, string] }> = {
   mails_vencimientos: { l: 'Mails que reciben los vencimientos', tipo: 'texto' },
   dias_alerta_vencimientos: { l: 'Avisar cuando falten (días)', tipo: 'texto' },
   dias_aviso_vencimiento: { l: 'Días de anticipación para "por vencer"', tipo: 'numero' },
   plazo_planta_dias: { l: 'Plazo máximo en planta (días)', tipo: 'numero' },
-  bloquear_generador: { l: 'Bloquear si la habilitación del generador está vencida', tipo: 'sino' },
+  bloquear_generador: { l: 'Bloquear si la habilitación del generador está vencida', tipo: 'sino', op: ['Sí, no deja emitir', 'No, solo avisa'] },
   form_inhalacion: { l: 'Formulario: toxicidad por inhalación', tipo: 'texto' },
   form_dermica: { l: 'Formulario: toxicidad dérmica', tipo: 'texto' },
   form_oral: { l: 'Formulario: toxicidad oral', tipo: 'texto' },
   form_instructivos: { l: 'Formulario: instructivos adjuntos (SI/NO)', tipo: 'texto' },
+  form_peligros: { l: 'Formulario: inflamabilidad, reactividad, toxicidad, especiales (SI/NO)', tipo: 'texto' },
+  plan_capacidad_solidos: { l: 'Viajes: kilos por batea (sólidos y barros)', tipo: 'numero' },
+  plan_capacidad_liquidos: { l: 'Viajes: litros por cisterna', tipo: 'numero' },
+  plan_mezclar_solidos: { l: 'Viajes: mezclar corrientes sólidas', tipo: 'sino', op: ['Sí', 'No, una corriente por viaje'] },
+  plan_mezclar_barros: { l: 'Viajes: mezclar corrientes semisólidas', tipo: 'sino', op: ['Sí', 'No, una corriente por viaje'] },
+  mails_reporte_producto: { l: 'Mails que reciben cada lunes la cantidad por producto', tipo: 'texto' },
 }
 
 function Parametros() {
@@ -202,7 +235,7 @@ function Parametros() {
         return (
           <label key={k} className="campo">{c.l}
             {c.tipo === 'sino'
-              ? <select value={p.valor} onChange={(e) => guardar(k, e.target.value)}><option value="si">Sí, no deja emitir</option><option value="no">No, solo avisa</option></select>
+              ? <select value={p.valor} onChange={(e) => guardar(k, e.target.value)}><option value="si">{c.op?.[0] ?? 'Sí'}</option><option value="no">{c.op?.[1] ?? 'No'}</option></select>
               : <input defaultValue={p.valor} type={c.tipo === 'numero' ? 'number' : 'text'} onBlur={(e) => e.target.value !== p.valor && guardar(k, e.target.value)} />}
             <span className="ayuda">{p.descripcion}</span>
           </label>)

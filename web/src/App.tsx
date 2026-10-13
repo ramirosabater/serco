@@ -10,6 +10,9 @@ import Vencimientos from './pages/Vencimientos'
 import Planta from './pages/Planta'
 import Reportes from './pages/Reportes'
 import ImprimirManifiesto from './pages/ImprimirManifiesto'
+import Etiquetas from './pages/Etiquetas'
+import Agenda from './pages/Agenda'
+import NacionDetalle from './pages/NacionDetalle'
 import Configuracion from './pages/Configuracion'
 import { PortalRetiros, PortalCertificados } from './pages/Portal'
 import ElegirClave from './auth/ElegirClave'
@@ -47,7 +50,10 @@ function Rutas() {
         <Route path="manifiestos/nuevo" element={<NuevoManifiesto />} />
         <Route path="manifiestos/:id" element={<ManifiestoDetalle />} />
         <Route path="manifiestos/:id/imprimir" element={<ImprimirManifiesto />} />
+        <Route path="manifiestos/:id/etiquetas" element={<Etiquetas />} />
         <Route path="planta" element={<Planta />} />
+        <Route path="agenda" element={<Agenda />} />
+        <Route path="nacion/:id" element={<NacionDetalle />} />
         <Route path="reportes" element={<Navigate to="/reportes/producto" replace />} />
         <Route path="reportes/:tipo" element={<Reportes />} />
         <Route path="vencimientos" element={<Vencimientos />} />

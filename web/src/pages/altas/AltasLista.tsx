@@ -9,7 +9,7 @@ type Fila = Record<string, unknown> & { id: number }
 
 export function MenuAltas() {
   return (
-    <nav className="bar" aria-label="Altas" style={{ marginBottom: 18 }}>
+    <nav className="bar" aria-label="Altas" style={{ marginBottom: 18 }} data-ayuda="altas-secciones">
       {ENTIDADES.map((e) => <NavLink key={e.clave} to={`/altas/${e.clave}`} className="subnav">{e.titulo}</NavLink>)}
     </nav>
   )
@@ -55,11 +55,11 @@ export default function AltasLista() {
       <MenuAltas />
       <div className="bar" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
         <h1>{e.titulo}</h1>
-        {puedeEditar && <Link to={`/altas/${e.clave}/nuevo`}><button className="pri">Agregar {e.singular}</button></Link>}
+        {puedeEditar && <Link to={`/altas/${e.clave}/nuevo`} data-ayuda="altas-agregar"><button className="pri">Agregar {e.singular}</button></Link>}
       </div>
       <p className="sub">{e.ayuda}</p>
       <div className="bar">
-        <input type="search" placeholder={`Buscar ${e.singular}`} defaultValue={q} onChange={(ev) => cambiar('q', ev.target.value.trim())} style={{ flex: 1, minWidth: 200 }} aria-label="Buscar" />
+        <input type="search" data-ayuda="altas-buscar" placeholder={`Buscar ${e.singular}`} defaultValue={q} onChange={(ev) => cambiar('q', ev.target.value.trim())} style={{ flex: 1, minWidth: 200 }} aria-label="Buscar" />
         {e.documentos.length > 0 && (
           <select value={filtro} onChange={(ev) => cambiar('estado', ev.target.value)} aria-label="Estado de los documentos">
             <option value="">Todos ({conEstado.length})</option>

@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import { MenuAltas } from './AltasLista'
 import CorrientesHabilitadas from '../../components/CorrientesHabilitadas'
 import DireccionesRetiro from '../../components/DireccionesRetiro'
+import ResumenGenerador from '../../components/ResumenGenerador'
 
 type Valores = Record<string, unknown>
 
@@ -180,14 +181,15 @@ export default function AltasFicha() {
       <p className="sub">{esNuevo ? 'Completá los datos y guardá. Los escaneos se suben después de guardar.' : e.ayuda}</p>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
       {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok}</div>}
+      {!esNuevo && id && e.clave === 'generadores' && <ResumenGenerador id={Number(id)} nombre={nombre} />}
 
-      <div className="card">
+      <div className="card" data-ayuda="ficha-datos">
         <h2>Datos</h2>
         <div className="campos">{e.campos.map((c) => <CampoInput key={c.k} c={c} v={valores[c.k]} set={(v) => set(c.k, v)} refs={refs} soloLectura={soloLectura} />)}</div>
       </div>
 
       {e.documentos.length > 0 && (
-        <div className="card mt">
+        <div className="card mt" data-ayuda="ficha-vtos">
           <h2>Documentos y vencimientos</h2>
           <div className="tw"><table>
             <thead><tr><th>Documento</th><th>Número</th><th>Vence</th><th>Estado</th><th>Escaneo</th></tr></thead>
@@ -202,7 +204,7 @@ export default function AltasFicha() {
             : <button type="button" onClick={() => cambiarActivo(true)}>Dar de alta de nuevo</button>)}
           <span style={{ flex: 1 }} />
           {hayCambios && <span className="muted small">Hay cambios sin guardar</span>}
-          <button className="pri" disabled={guardando || !hayCambios}>{guardando ? 'Guardando…' : esNuevo ? `Agregar ${e.singular}` : 'Guardar cambios'}</button>
+          <button className="pri" data-ayuda="ficha-guardar" disabled={guardando || !hayCambios}>{guardando ? 'Guardando…' : esNuevo ? `Agregar ${e.singular}` : 'Guardar cambios'}</button>
         </div>)}
     </form>
     {!esNuevo && id && e.extras?.includes('direcciones') && <DireccionesRetiro generadorId={id} soloLectura={soloLectura} />}

@@ -12,8 +12,9 @@ supabase/migrations/
   20261006000005_avisos.sql            avisos por mail: registro y certificados pendientes
   20261008000006_permisos_supabase.sql cierra el acceso anónimo (nada es público)
   20261013000007_impresion_reportes.sql textos del formulario, libros y estadísticas
+  20261014000008_funciones_prototipo.sql tablero, historial, instrucciones, planificador de viajes, ficha del generador
 supabase/functions/
-  avisos/                              mails diarios: certificados a clientes, vencimientos a Serco
+  avisos/                              mails diarios: certificados a clientes, vencimientos a Serco, reporte semanal por producto
   usuarios/                            invitar usuarios (personal y clientes del portal)
 migracion/
   migrar.py                            datos: Access → Postgres + informe de inconsistencias (necesita mdbtools)

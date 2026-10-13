@@ -24,13 +24,13 @@ function Barra({ desde, hasta, set, extra, onExcel, total }: {
 }) {
   return (
     <div className="bar no-imprimir">
-      <label className="small">Desde <input type="date" value={desde} onChange={(e) => set(e.target.value, hasta)} /></label>
+      <label className="small" data-ayuda="rep-fechas">Desde <input type="date" value={desde} onChange={(e) => set(e.target.value, hasta)} /></label>
       <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => set(desde, e.target.value)} /></label>
       {extra}
       <span style={{ flex: 1 }} />
       {total && <span className="muted small">{total}</span>}
-      {onExcel && <button onClick={onExcel}>Exportar a Excel</button>}
-      <button onClick={() => window.print()}>Imprimir</button>
+      {onExcel && <button onClick={onExcel} data-ayuda="rep-excel">Exportar a Excel</button>}
+      <button onClick={() => window.print()} data-ayuda="rep-imprimir">Imprimir</button>
     </div>
   )
 }
@@ -49,14 +49,21 @@ function PorProducto() {
   const [d, setD] = useState(inicioAnio()), [h, setH] = useState(hoy())
   const [agrupar, setAgrupar] = useState<'semana' | 'quincena' | 'mes'>('mes')
   const [planta, setPlanta] = useState('')
+  const [transp, setTransp] = useState('')
+  const [transportistas, setTransportistas] = useState<Op[]>([])
+  const [mails, setMails] = useState<string | null>(null)
   const [um, setUm] = useState<UM>('KGS')
   const [filas, setFilas] = useState<FilaProd[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.rpc('reporte_por_producto', { p_desde: d, p_hasta: h, p_agrupar: agrupar, p_planta: planta ? Number(planta) : null })
+    supabase.from('transportistas').select('id, nombre').order('nombre').then(({ data }) => setTransportistas(data ?? []))
+    supabase.from('parametros').select('valor').eq('clave', 'mails_reporte_producto').maybeSingle().then(({ data }) => setMails(data?.valor ?? ''))
+  }, [])
+  useEffect(() => {
+    supabase.rpc('reporte_por_producto', { p_desde: d, p_hasta: h, p_agrupar: agrupar, p_planta: planta ? Number(planta) : null, p_transportista: transp ? Number(transp) : null })
       .then(({ data, error }) => { setError(mensajeError(error)); setFilas((data ?? []) as FilaProd[]) })
-  }, [d, h, agrupar, planta])
+  }, [d, h, agrupar, planta, transp])
 
   const enUm = filas.filter((f) => f.um === um)
   const periodos = [...new Set(enUm.map((f) => f.periodo))].sort()
@@ -82,6 +89,7 @@ function PorProducto() {
         <select value={agrupar} onChange={(e) => setAgrupar(e.target.value as typeof agrupar)} aria-label="Agrupar"><option value="semana">Por semana</option><option value="quincena">Por quincena</option><option value="mes">Por mes</option></select>
         <select value={um} onChange={(e) => setUm(e.target.value as UM)} aria-label="Unidad"><option value="KGS">Kilos</option><option value="LTS">Litros</option><option value="MS3">m³</option></select>
         <select value={planta} onChange={(e) => setPlanta(e.target.value)} aria-label="Planta"><option value="">Todas las plantas</option>{plantas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
+        <select value={transp} onChange={(e) => setTransp(e.target.value)} aria-label="Transportista"><option value="">Todos los transportistas</option>{transportistas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
       </>} />
       {error && <div className="aviso bad">{error}</div>}
       <div className="card libro">
@@ -95,6 +103,9 @@ function PorProducto() {
             </tbody>
           </table></div>)}
         <p className="small muted no-imprimir" style={{ marginBottom: 0 }}>Por fecha de retiro. Cuando Serco pase su planilla actual, se ajustan las columnas para que salga igual.</p>
+        {mails !== null && <p className="small no-imprimir" style={{ marginBottom: 0 }}>
+          <b>Envío automático:</b> {mails.trim() ? <>cada lunes le llega a {mails} la semana anterior, en kilos y litros.</> : <>no está configurado. Se activa cargando los mails en <NavLink to="/configuracion">Configuración → Parámetros</NavLink> (cuando estén activos los avisos por mail).</>}
+        </p>}
       </div>
     </>
   )
@@ -218,7 +229,7 @@ function LibroNacional() {
 // ---------------------------------------------------------------- Estadísticas
 interface Rank { nombre: string; um: UM; total: number }
 interface Est { manifiestos: number; generadores: number; residuos: number; totales: Partial<Record<UM, number>>
-  corrientes: Rank[]; generadores_top: Rank[]; destinos: Rank[]; por_mes: { mes: string; kgs: number | null; lts: number | null }[] }
+  corrientes: Rank[]; generadores_top: Rank[]; destinos: Rank[]; plantas?: Rank[]; estado_fisico?: Rank[]; por_mes: { mes: string; kgs: number | null; lts: number | null }[] }
 
 /** Ranking con barras horizontales: una sola serie, un solo color, el valor escrito al lado */
 function Ranking({ titulo, l }: { titulo: string; l: Rank[] }) {
@@ -234,6 +245,31 @@ function Ranking({ titulo, l }: { titulo: string; l: Rank[] }) {
             <span className="rk-v">{num(Math.round(x.total))} {umL(x.um)}</span>
           </div>))}
         </div>)}
+    </div>
+  )
+}
+
+/** Sólidos, líquidos y barros: una barra apilada por unidad, con el porcentaje escrito */
+function EstadoFisico({ l }: { l: Rank[] }) {
+  const COLOR: Record<string, string> = { 'SÓLIDO': 'var(--s3)', 'LÍQUIDO': 'var(--s1)', 'SEMISÓLIDO': 'var(--s0)' }
+  const NOMBRE: Record<string, string> = { 'SÓLIDO': 'Sólidos', 'LÍQUIDO': 'Líquidos', 'SEMISÓLIDO': 'Barros (semisólidos)' }
+  const unidades = [...new Set(l.map((x) => x.um))]
+  return (
+    <div className="card mt">
+      <h2>Sólidos, líquidos y barros</h2>
+      {unidades.map((u) => {
+        const filas = l.filter((x) => x.um === u)
+        const tot = filas.reduce((a, x) => a + x.total, 0) || 1
+        return (
+          <div key={u} style={{ marginBottom: 10 }}>
+            {unidades.length > 1 && <div className="muted small" style={{ marginBottom: 4 }}>En {u === 'KGS' ? 'kilos' : u === 'LTS' ? 'litros' : 'm³'}</div>}
+            <div className="apilada">{filas.map((x) => <span key={x.nombre} style={{ width: `${(x.total / tot) * 100}%`, background: COLOR[x.nombre] ?? 'var(--mute)' }} title={`${NOMBRE[x.nombre] ?? x.nombre}: ${num(Math.round(x.total))} ${umL(u)}`} />)}</div>
+            <div className="leyenda" style={{ flexWrap: 'wrap' }}>{filas.map((x) => (
+              <span key={x.nombre}><i className="punto-c" style={{ background: COLOR[x.nombre] ?? 'var(--mute)' }} /><b>{NOMBRE[x.nombre] ?? x.nombre}</b> {num(Math.round(u === 'KGS' ? x.total / 1000 : x.total))} {u === 'KGS' ? 't' : umL(u)} · {Math.round((x.total / tot) * 100)} %</span>))}
+            </div>
+          </div>)
+      })}
+      <p className="small muted" style={{ margin: 0 }}>Según el estado físico de cada corriente.</p>
     </div>
   )
 }
@@ -269,10 +305,12 @@ function Estadisticas() {
               </div>))}
             </div>
           </div>)}
-        <div className="grid c3 mt">
+        {e.estado_fisico && <EstadoFisico l={e.estado_fisico} />}
+        <div className="grid c2 mt">
           <Ranking titulo="Corrientes con más volumen" l={e.corrientes} />
           <Ranking titulo="Generadores con más volumen" l={e.generadores_top} />
           <Ranking titulo="Destinos de disposición final" l={e.destinos} />
+          {e.plantas && <Ranking titulo="Planta que recibe" l={e.plantas} />}
         </div>
       </>}
     </>
@@ -288,7 +326,7 @@ export default function Reportes() {
       <div className="no-imprimir">
         <h1>Reportes</h1>
         <p className="sub">{REPORTES[t][1]}</p>
-        <nav className="bar" aria-label="Reportes" style={{ marginBottom: 18 }}>
+        <nav className="bar" aria-label="Reportes" style={{ marginBottom: 18 }} data-ayuda="rep-tipos">
           {Object.entries(REPORTES).map(([k, [n]]) => <NavLink key={k} to={`/reportes/${k}`} className={`subnav ${k === t ? 'active' : ''}`}>{n}</NavLink>)}
         </nav>
       </div>

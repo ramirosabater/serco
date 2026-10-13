@@ -17,8 +17,8 @@ export interface Item {
   estado: EstadoResiduo
   fecha_entrega_df: string | null
   corrientes?: { codigo: string; descripcion: string | null } | null
-  manifiestos_nacion?: { id: number; numero: string; fecha: string; operadores?: { nombre: string } | null } | null
-  certificados?: { id: number; numero: string; fecha: string; archivo: string | null; operadores?: { nombre: string } | null } | null
+  manifiestos_nacion?: { id: number; numero: string; fecha: string; escaneo?: string | null; operadores?: { nombre: string } | null } | null
+  certificados?: { id: number; numero: string; fecha: string; archivo: string | null; enviado_cliente?: string | null; operadores?: { nombre: string } | null } | null
 }
 
 export interface Manifiesto {
@@ -32,6 +32,8 @@ export interface Manifiesto {
   nota: string | null
   escaneo: string | null
   validacion_omitida?: string | null
+  instrucciones?: Instrucciones | null
+  creado?: string
   generadores?: { id: number; nombre: string; cuit: string | null } | null
   generadores_principales?: { nombre: string } | null
   transportistas?: { id: number; nombre: string } | null
@@ -51,3 +53,14 @@ export interface Alerta {
 }
 
 export interface Opcion { id: number; nombre: string }
+
+/** Bloque 4 del formulario azul: instrucciones de manipulación */
+export interface Instrucciones {
+  inhalacion: 'Baja' | 'Media' | 'Alta'
+  dermica: 'Baja' | 'Media' | 'Alta'
+  oral: 'Baja' | 'Media' | 'Alta'
+  /** inflamabilidad, reactividad, toxicidad, instrucciones especiales */
+  peligros: [boolean, boolean, boolean, boolean]
+  /** manipulación, contingencia, rol de emergencia, hoja de ruta, rutas alternativas */
+  instructivos: [boolean, boolean, boolean, boolean, boolean]
+}

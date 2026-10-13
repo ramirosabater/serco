@@ -3,14 +3,15 @@ import { Link, useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, num, umL } from '../lib/formato'
-import type { UM } from '../lib/tipos'
+import type { Instrucciones, UM } from '../lib/tipos'
+import { instruccionesPorDefecto } from '../lib/instrucciones'
 
 // Impresión sobre el formulario azul preimpreso de la Provincia (manifiesto de retiro).
 // Posiciones en milímetros, medidas sobre el formulario original escaneado (Manifiesto_Serco_Escaneado.pdf).
 // Lo preimpreso (número, transportista Serco Ambiental, títulos) NO se imprime.
 
 interface Datos {
-  id: number; numero: string; fecha: string; tipo: 'azul' | 'rosa'; anulado: boolean; direccion_retiro: string | null
+  id: number; numero: string; fecha: string; tipo: 'azul' | 'rosa'; anulado: boolean; direccion_retiro: string | null; instrucciones: Instrucciones | null
   generadores: { nombre: string; cuit: string | null; ciudad: string | null; hab_mun_nro: string | null; hab_mun_vto: string | null } | null
   generadores_principales: { nombre: string; cuit: string | null; hab_pro_nro: string | null; hab_pro_vto: string | null } | null
   transportistas: { nombre: string; hab_pro_vto: string | null } | null
@@ -20,7 +21,7 @@ interface Datos {
     corrientes: { codigo: string; descripcion: string | null; estado_fisico: string | null } | null }[]
 }
 
-const SELECT = `id, numero, fecha, tipo, anulado, direccion_retiro,
+const SELECT = `id, numero, fecha, tipo, anulado, direccion_retiro, instrucciones,
   generadores(nombre, cuit, ciudad, hab_mun_nro, hab_mun_vto),
   generadores_principales(nombre, cuit, hab_pro_nro, hab_pro_vto),
   transportistas(nombre, hab_pro_vto),
@@ -90,7 +91,8 @@ export default function ImprimirManifiesto() {
   const items = m.manifiesto_items
   const lineas = items.map((i) => cortar(i.corrientes?.descripcion ?? '', 18))
   const unaLinea = lineas.reduce((a, l) => a + l.length, 0) > RENGLONES
-  const instr = (p.form_instructivos ?? 'SI,SI,SI,SI,NO').split(',').map((x) => x.trim().toUpperCase())
+  // Bloque 4: las del manifiesto; si no tiene (los del Access), las de Configuración → Parámetros
+  const ins = m.instrucciones ?? instruccionesPorDefecto(p)
 
   const filas: ReactNode[] = []
   let r = 0
@@ -134,12 +136,14 @@ export default function ImprimirManifiesto() {
       {/* 3. Residuos */}
       {filas}
       {/* 4. Instrucciones de manipulación */}
-      <F x={67} y={158} w={40} t={p.form_inhalacion ?? 'Baja'} />
-      <F x={67} y={162.5} w={40} t={p.form_dermica ?? 'Baja'} />
-      <F x={67} y={166.8} w={40} t={p.form_oral ?? 'Baja'} />
+      <F x={67} y={158} w={40} t={ins.inhalacion} />
+      <F x={67} y={162.5} w={40} t={ins.dermica} />
+      <F x={67} y={166.8} w={40} t={ins.oral} />
+      {/* Sistema de identificación de peligrosidad: inflamabilidad, reactividad, toxicidad, instrucciones especiales */}
+      {([[136.6, 157.2], [168.5, 156.9], [128.4, 161.5], [182.3, 161.3]] as const).map(([x, y], k) => ins.peligros[k] && <F key={`p${k}`} x={x} y={y} w={4} t="X" c="x" />)}
       {/* 5. Instructivos: X en SI (adjunta) o en NO */}
       {[178.7, 186.5, 194.3, 202.2, 210.1].map((y, k) => (
-        <F key={y} x={instr[k] === 'NO' ? 176.5 : 148.5} y={y} w={4} t="X" c="x" />))}
+        <F key={y} x={ins.instructivos[k] ? 148.5 : 176.5} y={y} w={4} t="X" c="x" />))}
       {/* 6. Certificaciones */}
       <F x={152} y={228.8} w={40} t={d} />
       <F x={110} y={236.4} w={38} t="Chofer" />
@@ -177,17 +181,17 @@ export default function ImprimirManifiesto() {
         </div>
         {/* Copia solo para la impresora: fuera de la app, a tamaño real y sin el fondo */}
         {createPortal(<div className="hoja-print"><div className="capa" style={{ transform: `translate(${calib.x}mm, ${calib.y}mm)` }}>{datos}</div></div>, document.body)}
-        <div className="card stack no-imprimir" style={{ alignSelf: 'start' }}>
+        <div className="card stack no-imprimir" style={{ alignSelf: 'start' }} data-ayuda="imp-panel">
           <h2 style={{ margin: 0 }}>Antes de imprimir</h2>
           <p className="small muted" style={{ margin: 0 }}>Poné el formulario azul en la bandeja. Imprimí en A4, a escala 100 % y sin márgenes.</p>
           {avisos.length > 0 && <div className="aviso haz small"><ul style={{ margin: 0, paddingLeft: 18 }}>{avisos.map((a) => <li key={a}>{a}</li>)}</ul></div>}
-          <label className="campo">Mover a la derecha (mm)
+          <label className="campo" data-ayuda="imp-calib">Mover a la derecha (mm)
             <input type="number" step="0.5" value={calib.x} onChange={(e) => setCalib({ ...calib, x: Number(e.target.value) || 0 })} /></label>
           <label className="campo">Mover hacia abajo (mm)
             <input type="number" step="0.5" value={calib.y} onChange={(e) => setCalib({ ...calib, y: Number(e.target.value) || 0 })} /></label>
           <span className="ayuda small muted">Si los datos salen corridos, ajustá y volvé a probar. Queda guardado en esta PC.</span>
-          <label className="small"><input type="checkbox" checked={guia} onChange={(e) => setGuia(e.target.checked)} /> Ver el formulario de fondo</label>
-          <button className="pri" onClick={() => window.print()}>Imprimir</button>
+          <label className="small" data-ayuda="imp-guia"><input type="checkbox" checked={guia} onChange={(e) => setGuia(e.target.checked)} /> Ver el formulario de fondo</label>
+          <button className="pri" onClick={() => window.print()} data-ayuda="imp-imprimir">Imprimir</button>
           <span className="small muted">Se imprimen solo los datos, nunca el fondo.</span>
         </div>
       </div>

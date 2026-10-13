@@ -33,10 +33,10 @@ export default function DireccionesRetiro({ generadorId, soloLectura }: { genera
       <h2>Direcciones de retiro ({dirs.length})</h2>
       {error && <div className="aviso bad" style={{ marginBottom: 12 }}>{error}</div>}
       {dirs.length === 0 ? <p className="muted">Sin direcciones cargadas.</p> : (
-        <table><tbody>{dirs.map((d) => (
+        <div className="tw"><table><tbody>{dirs.map((d) => (
           <tr key={d.id}><td>{d.direccion}</td><td className="muted">{d.ciudad ?? ''}</td>
             <td style={{ textAlign: 'right' }}>{!soloLectura && <button type="button" className="link" onClick={() => quitar(d)}>Quitar</button>}</td></tr>))}
-        </tbody></table>)}
+        </tbody></table></div>)}
       {!soloLectura && (
         <div className="bar mt">
           <input placeholder="Nueva dirección" value={nueva} onChange={(e) => setNueva(e.target.value)} style={{ flex: 2, minWidth: 200 }} aria-label="Nueva dirección" />

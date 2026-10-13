@@ -16,7 +16,7 @@ const ESTADOS: Record<Alerta['estado'], [string, string]> = { vencido: ['Vencido
 
 export default function Vencimientos() {
   const nav = useNavigate()
-  const [tipo, setTipo] = useState<string>('flota')
+  const [tipo, setTipo] = useState<string>(() => new URLSearchParams(window.location.search).get('tipo') ?? 'flota')
   const [estado, setEstado] = useState<string>('problemas')
   const [lista, setLista] = useState<Alerta[]>([])
   const [cargando, setCargando] = useState(true)
@@ -37,7 +37,7 @@ export default function Vencimientos() {
       <h1>Vencimientos</h1>
       <p className="sub">Con un documento vencido o sin cargar, el sistema no deja emitir con ese camión, chofer o transportista. Tocá una fila para actualizarlo.</p>
       <div className="bar">
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Qué mostrar">
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Qué mostrar" data-ayuda="venc-filtro">
           <option value="flota">Camiones y choferes</option>
           <option value="">Todos</option>
           {Object.entries(PLURAL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -52,7 +52,7 @@ export default function Vencimientos() {
         </select>
         <span className="muted small">{lista.length} documentos: {(['por_vencer', 'vencido', 'sin_cargar'] as const).map((e) => `${lista.filter((a) => a.estado === e).length} ${ESTADOS[e][0].toLowerCase()}`).join(' · ')}</span>
       </div>
-      <div className="card">
+      <div className="card" data-ayuda="venc-tabla">
         {cargando ? <p className="cargando">Cargando…</p> : lista.length === 0 ? <p className="vacio">Todo al día.</p> : (
           <div className="tw"><table>
             <thead><tr><th>Qué</th><th>Nombre</th><th>Documento</th><th>Vencimiento</th><th>Estado</th></tr></thead>

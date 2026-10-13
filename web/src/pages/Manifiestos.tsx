@@ -10,7 +10,7 @@ const POR_PAGINA = 50
 export default function Manifiestos() {
   const nav = useNavigate()
   const [sp, setSp] = useSearchParams()
-  const q = sp.get('q') ?? '', estado = sp.get('estado') ?? '', desde = sp.get('desde') ?? '', hasta = sp.get('hasta') ?? ''
+  const q = sp.get('q') ?? '', etapa = sp.get('etapa') ?? '', desde = sp.get('desde') ?? '', hasta = sp.get('hasta') ?? ''
   const anulados = sp.get('anulados') === '1', pagina = Number(sp.get('p') ?? 0)
   const [lista, setLista] = useState<Manifiesto[]>([])
   const [total, setTotal] = useState(0)
@@ -24,12 +24,16 @@ export default function Manifiestos() {
 
   useEffect(() => {
     setCargando(true)
+    // Número, código de corriente (Y48, Y9…) o nombre del generador
     const soloNumero = /^[\d\s-]+$/.test(q)
-    const sel = `id, numero, fecha, tipo, anulado, generadores${q && !soloNumero ? '!inner' : ''}(nombre),
-      manifiesto_items${estado ? '!inner' : ''}(estado, cantidad, um, corrientes(codigo))`
+    const corriente = /^y\d/i.test(q)
+    const sel = `id, numero, fecha, tipo, anulado, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
+      manifiesto_items(estado, cantidad, um, corrientes(codigo))${corriente ? ', filtro:manifiesto_items!inner(corrientes!inner(codigo))' : ''}`
     let c = supabase.from('manifiestos').select(sel, { count: 'exact' })
-    if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`) : c.ilike('generadores.nombre', `%${q}%`)
-    if (estado) c = c.eq('manifiesto_items.estado', estado)
+    if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`)
+      : corriente ? c.ilike('filtro.corrientes.codigo', `${q.replace(/\s/g, '')}%`)
+      : c.ilike('generadores.nombre', `%${q}%`)
+    if (etapa) c = c.eq('etapa', Number(etapa))
     if (desde) c = c.gte('fecha', desde)
     if (hasta) c = c.lte('fecha', hasta)
     if (!anulados) c = c.eq('anulado', false)
@@ -38,7 +42,7 @@ export default function Manifiestos() {
       .then(({ data, count, error }) => {
         setError(mensajeError(error)); setLista((data ?? []) as unknown as Manifiesto[]); setTotal(count ?? 0); setCargando(false)
       })
-  }, [q, estado, desde, hasta, anulados, pagina])
+  }, [q, etapa, desde, hasta, anulados, pagina])
 
   const paginas = Math.ceil(total / POR_PAGINA)
   const ir = (p: number) => { const n = new URLSearchParams(sp); n.set('p', String(p)); setSp(n) }
@@ -47,16 +51,16 @@ export default function Manifiestos() {
     <>
       <div className="bar" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
         <h1>Manifiestos</h1>
-        <Link to="/manifiestos/nuevo"><button className="pri">Nuevo manifiesto</button></Link>
+        <Link to="/manifiestos/nuevo" data-ayuda="man-nuevo"><button className="pri">Nuevo manifiesto</button></Link>
       </div>
       <p className="sub">Tocá un manifiesto para ver su recorrido completo.</p>
       <div className="bar">
-        <input type="search" placeholder="Buscar por número o generador" value={texto} onChange={(e) => setTexto(e.target.value)} style={{ flex: 1, minWidth: 220 }} aria-label="Buscar" />
-        <select value={estado} onChange={(e) => cambiar('estado', e.target.value)} aria-label="Etapa">
+        <input type="search" data-ayuda="man-buscar" placeholder="Buscar por número, generador o corriente" value={texto} onChange={(e) => setTexto(e.target.value)} style={{ flex: 1, minWidth: 220 }} aria-label="Buscar" />
+        <select value={etapa} onChange={(e) => cambiar('etapa', e.target.value)} aria-label="Etapa">
           <option value="">Todas las etapas</option>
-          <option value="almacenado">Con residuos almacenados</option>
-          <option value="en_transito">Con residuos en tránsito</option>
-          <option value="disposicion_final">Con residuos dispuestos</option>
+          <option value="0">Almacenado</option>
+          <option value="1">En tránsito</option>
+          <option value="2">Dispuesto</option>
         </select>
         <label className="small">Desde <input type="date" value={desde} onChange={(e) => cambiar('desde', e.target.value)} /></label>
         <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => cambiar('hasta', e.target.value)} /></label>
