@@ -1,0 +1,91 @@
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { supabase, mensajeError } from '../lib/supabase'
+import { etapaManifiesto, fd, fnum, num, umL } from '../lib/formato'
+import type { Manifiesto } from '../lib/tipos'
+import { PillEtapa } from '../components/Etapa'
+
+const POR_PAGINA = 50
+
+export default function Manifiestos() {
+  const nav = useNavigate()
+  const [sp, setSp] = useSearchParams()
+  const q = sp.get('q') ?? '', estado = sp.get('estado') ?? '', desde = sp.get('desde') ?? '', hasta = sp.get('hasta') ?? ''
+  const anulados = sp.get('anulados') === '1', pagina = Number(sp.get('p') ?? 0)
+  const [lista, setLista] = useState<Manifiesto[]>([])
+  const [total, setTotal] = useState(0)
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [texto, setTexto] = useState(q)
+
+  const cambiar = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); n.delete('p'); setSp(n) }
+
+  useEffect(() => { const t = setTimeout(() => { if (texto !== q) cambiar('q', texto.trim()) }, 350); return () => clearTimeout(t) })
+
+  useEffect(() => {
+    setCargando(true)
+    const soloNumero = /^[\d\s-]+$/.test(q)
+    const sel = `id, numero, fecha, tipo, anulado, generadores${q && !soloNumero ? '!inner' : ''}(nombre),
+      manifiesto_items${estado ? '!inner' : ''}(estado, cantidad, um, corrientes(codigo))`
+    let c = supabase.from('manifiestos').select(sel, { count: 'exact' })
+    if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`) : c.ilike('generadores.nombre', `%${q}%`)
+    if (estado) c = c.eq('manifiesto_items.estado', estado)
+    if (desde) c = c.gte('fecha', desde)
+    if (hasta) c = c.lte('fecha', hasta)
+    if (!anulados) c = c.eq('anulado', false)
+    c.order('fecha', { ascending: false }).order('numero', { ascending: false })
+      .range(pagina * POR_PAGINA, pagina * POR_PAGINA + POR_PAGINA - 1)
+      .then(({ data, count, error }) => {
+        setError(mensajeError(error)); setLista((data ?? []) as unknown as Manifiesto[]); setTotal(count ?? 0); setCargando(false)
+      })
+  }, [q, estado, desde, hasta, anulados, pagina])
+
+  const paginas = Math.ceil(total / POR_PAGINA)
+  const ir = (p: number) => { const n = new URLSearchParams(sp); n.set('p', String(p)); setSp(n) }
+
+  return (
+    <>
+      <div className="bar" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+        <h1>Manifiestos</h1>
+        <Link to="/manifiestos/nuevo"><button className="pri">Nuevo manifiesto</button></Link>
+      </div>
+      <p className="sub">Tocá un manifiesto para ver su recorrido completo.</p>
+      <div className="bar">
+        <input type="search" placeholder="Buscar por número o generador" value={texto} onChange={(e) => setTexto(e.target.value)} style={{ flex: 1, minWidth: 220 }} aria-label="Buscar" />
+        <select value={estado} onChange={(e) => cambiar('estado', e.target.value)} aria-label="Etapa">
+          <option value="">Todas las etapas</option>
+          <option value="almacenado">Con residuos almacenados</option>
+          <option value="en_transito">Con residuos en tránsito</option>
+          <option value="disposicion_final">Con residuos dispuestos</option>
+        </select>
+        <label className="small">Desde <input type="date" value={desde} onChange={(e) => cambiar('desde', e.target.value)} /></label>
+        <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => cambiar('hasta', e.target.value)} /></label>
+        <label className="small"><input type="checkbox" checked={anulados} onChange={(e) => cambiar('anulados', e.target.checked ? '1' : '')} /> Ver anulados</label>
+      </div>
+      <div className="card">
+        {error && <div className="aviso bad">{error}</div>}
+        {cargando ? <p className="cargando">Buscando manifiestos…</p> : lista.length === 0 ? <p className="vacio">No hay manifiestos con ese criterio.</p> : (
+          <div className="tw"><table>
+            <thead><tr><th>Manifiesto</th><th>Fecha</th><th>Generador</th><th>Residuos</th><th>Etapa</th></tr></thead>
+            <tbody>{lista.map((m) => {
+              const it = m.manifiesto_items ?? []
+              return (
+                <tr key={m.id} className="fila" tabIndex={0} onClick={() => nav(`/manifiestos/${m.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/manifiestos/${m.id}`)}>
+                  <td className="nw"><b>{fnum(m.numero)}</b>{m.tipo === 'rosa' && <span className="muted small"> rosa</span>}</td>
+                  <td className="nw">{fd(m.fecha)}</td>
+                  <td>{m.generadores?.nombre}</td>
+                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo} · {num(i.cantidad)} {umL(i.um)}</span>)}</td>
+                  <td>{m.anulado ? <span className="pill bad">Anulado</span> : <PillEtapa etapa={etapaManifiesto(it.map((i) => i.estado))} />}</td>
+                </tr>)
+            })}</tbody>
+          </table></div>)}
+        {paginas > 1 && (
+          <div className="paginas">
+            <span className="muted small">{num(total)} manifiestos · página {pagina + 1} de {num(paginas)}</span>
+            <button disabled={pagina === 0} onClick={() => ir(pagina - 1)}>Anterior</button>
+            <button disabled={pagina + 1 >= paginas} onClick={() => ir(pagina + 1)}>Siguiente</button>
+          </div>)}
+      </div>
+    </>
+  )
+}
