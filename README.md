@@ -13,6 +13,7 @@ supabase/migrations/
   20261008000006_permisos_supabase.sql cierra el acceso anónimo (nada es público)
   20261013000007_impresion_reportes.sql textos del formulario, libros y estadísticas
   20261014000008_funciones_prototipo.sql tablero, historial, instrucciones, planificador de viajes, ficha del generador
+  20261014000009_choferes_dni.sql        DNI de los choferes (lectura de certificados)
 supabase/functions/
   avisos/                              mails diarios: certificados a clientes, vencimientos a Serco, reporte semanal por producto
   usuarios/                            invitar usuarios (personal y clientes del portal)

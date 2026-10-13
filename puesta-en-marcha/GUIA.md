@@ -1,6 +1,6 @@
 # SGRP 2.0 · Puesta en marcha en Supabase
 
-> También se puede hacer con los archivos de `sql-por-separado`: correr del 01 al 07 en el SQL Editor, después cargar los datos (paso 3 de esta guía), el 08 (administrador) y el 09. El resultado es el mismo.
+> También se puede hacer con los archivos de `sql-por-separado`: correr del 01 al 07 en el SQL Editor, después cargar los datos (paso 3 de esta guía), el 08 (administrador), el 09 y el 10. El resultado es el mismo.
 
 Tiempo estimado: 40 minutos. Se hace una sola vez.
 

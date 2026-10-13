@@ -982,3 +982,10 @@ revoke execute on function etapa(manifiestos), tablero_resumen(date, date), hist
   reporte_por_producto(date, date, text, bigint, bigint), estadisticas(date, date), ultimos_ingresos(), destinos_habituales() from public, anon;
 grant execute on function etapa(manifiestos), tablero_resumen(date, date), historial_manifiesto(bigint), generador_resumen(bigint),
   reporte_por_producto(date, date, text, bigint, bigint), estadisticas(date, date), ultimos_ingresos(), destinos_habituales() to authenticated;
+
+-- ===================== 20261014000009_choferes_dni.sql =====================
+-- SGRP 2.0 · DNI de los choferes (para consultar y controlar sus certificados).
+-- En el Access el número de licencia de conducir es el DNI: se copia de ahí.
+-- Se puede correr más de una vez.
+alter table choferes add column if not exists dni text;
+update choferes set dni = carnet_nro where dni is null and carnet_nro ~ '^\d{7,8}$';

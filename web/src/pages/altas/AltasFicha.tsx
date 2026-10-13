@@ -4,6 +4,7 @@ import { supabase, mensajeError } from '../../lib/supabase'
 import { entidad, estadoVto, ETIQUETA_ESTADO, type Campo, type Documento, type Entidad } from '../../lib/altas'
 import { cuitValido, soloDigitos } from '../../lib/cuit'
 import { fd } from '../../lib/formato'
+import { leerCertificado, NOMBRE_TIPO } from '../../lib/leerCertificado'
 import { useAuth } from '../../auth/AuthProvider'
 import { MenuAltas } from './AltasLista'
 import CorrientesHabilitadas from '../../components/CorrientesHabilitadas'
@@ -66,16 +67,49 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
   const archivo = d.archivo ? (valores[d.archivo] as string | null) : null
   const est = estadoVto(vto)
 
+  const [lectura, setLectura] = useState<{ ok: boolean; t: string } | null>(null)
+  const dniFicha = String(valores.dni ?? valores.carnet_nro ?? '').replace(/\D/g, '')
+
   async function subir(f: File) {
     if (!id || !d.archivo) { onError('Guardá primero la ficha y después subí el archivo.'); return }
+    setLectura(null)
+    let vence = vto
+    // Certificados que el sistema sabe leer: se controla el DNI y se toma el vencimiento
+    if (d.lector) {
+      setSubiendo(true)
+      const l = await leerCertificado(f)
+      setSubiendo(false)
+      if (l && l.tipo !== d.lector) {
+        setLectura({ ok: false, t: l.tipo === 'curso'
+          ? `Es el ${NOMBRE_TIPO.curso}${l.fecha ? ` aprobado el ${fd(l.fecha)}` : ''} y no trae vencimiento. El vencimiento lo da Seguridad Vial: subí su PDF o una captura donde se vea el código QR.`
+          : `Este archivo es un ${NOMBRE_TIPO[l.tipo]}: subilo en la fila que corresponde.` })
+        return
+      }
+      if (l?.dni && dniFicha && l.dni !== dniFicha) {
+        setLectura({ ok: false, t: `El certificado es de ${l.nombre ?? 'otra persona'} (DNI ${l.dni}) y este chofer tiene DNI ${dniFicha}. No se subió.` })
+        return
+      }
+      if (l?.vence) vence = l.vence
+      setLectura(l ? { ok: true, t: `Leído del certificado${l.nombre ? ` de ${l.nombre}` : ''}: ${l.detalle}.${l.vence && l.vence !== vto ? ' Se cargó el vencimiento: tocá "Guardar cambios".' : ''}` }
+        : { ok: false, t: 'No se pudo leer el certificado: se sube igual, cargá el vencimiento a mano.' })
+      if (l?.vence && l.vence !== vto) set(d.vto, l.vence)
+      if (l?.dni && !valores.dni && 'dni' in valores) set('dni', l.dni)
+    }
     setSubiendo(true)
     const ext = (f.name.split('.').pop() || 'pdf').toLowerCase()
-    const ruta = `habilitaciones/${tabla}/${id}/${d.archivo}-${vto ?? 'sin-fecha'}-${Date.now()}.${ext}`
+    const ruta = `habilitaciones/${tabla}/${id}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('documentos').upload(ruta, f, { upsert: false, contentType: f.type || undefined })
     if (error) { onError('No se pudo subir el archivo: ' + mensajeError(error)); setSubiendo(false); return }
     const { error: e2 } = await supabase.from(tabla).update({ [d.archivo]: ruta }).eq('id', id)
     setSubiendo(false)
     if (e2) onError(mensajeError(e2)); else set(d.archivo, ruta)
+  }
+
+  /** Copia el DNI y abre la consulta oficial (la persona completa el captcha y baja el certificado) */
+  async function consultar(url: string) {
+    if (dniFicha) { try { await navigator.clipboard.writeText(dniFicha) } catch { /* sin portapapeles */ } }
+    window.open(url, '_blank', 'noopener')
+    setLectura({ ok: true, t: dniFicha ? `DNI ${dniFicha} copiado: pegalo en la página, tildá "No soy un robot", bajá el certificado y subilo acá.` : 'Cargá el DNI del chofer en Datos para copiarlo directo.' })
   }
 
   async function ver() {
@@ -86,8 +120,13 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
   }
 
   return (
+    <>
     <tr>
-      <td><b>{d.label}</b></td>
+      <td><b>{d.label}</b>
+        {d.consultas && !soloLectura && <div className="consultas">{d.consultas.map((c) => (
+          <button key={c.url} type="button" className="link small" onClick={() => consultar(c.url)} title="Copia el DNI y abre la página oficial">Consultar en {c.nombre}</button>))}
+        </div>}
+      </td>
       <td>{d.nro ? <input value={(valores[d.nro] as string) ?? ''} onChange={(e) => set(d.nro!, e.target.value || null)} disabled={soloLectura} aria-label={`Número de ${d.label}`} style={{ width: '100%', minWidth: 110 }} /> : <span className="muted">—</span>}</td>
       <td><input type="date" value={vto ?? ''} onChange={(e) => set(d.vto, e.target.value || null)} disabled={soloLectura} aria-label={`Vencimiento de ${d.label}`} /></td>
       <td><span className={`pill ${ETIQUETA_ESTADO[est][1]}`}>{est === 'vigente' || est === 'por_vencer' ? `Vence ${fd(vto)}` : ETIQUETA_ESTADO[est][0]}</span></td>
@@ -100,8 +139,11 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
           </label>}
           {!archivo && soloLectura && <span className="muted">Sin archivo</span>}
         </>}
+        {subiendo && d.lector && <div className="muted small">Leyendo el certificado…</div>}
       </td>
     </tr>
+    {lectura && <tr className="lectura"><td colSpan={5}><div className={`aviso ${lectura.ok ? 'ok' : 'haz'} small`}>{lectura.t}</div></td></tr>}
+    </>
   )
 }
 

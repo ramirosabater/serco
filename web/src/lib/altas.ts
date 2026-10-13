@@ -13,7 +13,13 @@ export interface Campo {
 }
 
 /** Un documento con vencimiento: número (opcional), fecha de vencimiento y archivo escaneado */
-export interface Documento { label: string; nro?: string; vto: string; archivo?: string }
+export interface Documento {
+  label: string; nro?: string; vto: string; archivo?: string
+  /** Certificado que el sistema sabe leer al subirlo (saca DNI y vencimiento) */
+  lector?: 'psicofisico' | 'mmpp'
+  /** Páginas oficiales donde se consulta con el DNI (tienen captcha: la consulta la hace una persona) */
+  consultas?: { nombre: string; url: string }[]
+}
 
 export type Extra = 'corrientes' | 'direcciones'
 
@@ -73,11 +79,15 @@ export const ENTIDADES: Entidad[] = [
     clave: 'choferes', tabla: 'choferes', titulo: 'Choferes', singular: 'chofer', nombre: 'nombre', activo: 'activo',
     ayuda: 'Con el carnet, la licencia de carga peligrosa o el psicofísico vencidos, el chofer no puede salir con un manifiesto.',
     select: '*, transportistas(nombre)', columnas: [{ k: 'transportistas', label: 'Transportista', ref: 'nombre' }],
-    campos: [{ k: 'nombre', label: 'Apellido y nombre', tipo: 'texto', req: true, ancho: 'doble' }, transportista],
+    campos: [{ k: 'nombre', label: 'Apellido y nombre', tipo: 'texto', req: true, ancho: 'doble' }, transportista,
+      { k: 'dni', label: 'DNI', tipo: 'texto', ayuda: 'Se usa para consultar y controlar sus certificados.' }],
     documentos: [
       { label: 'Carnet de conducir', nro: 'carnet_nro', vto: 'carnet_vto', archivo: 'carnet_archivo' },
-      { label: 'Licencia de carga peligrosa (CNRT)', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo' },
-      { label: 'Psicofísico', vto: 'sep_vto', archivo: 'sep_archivo' },
+      { label: 'Carga peligrosa (Seguridad Vial)', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo', lector: 'mmpp',
+        consultas: [{ nombre: 'Seguridad Vial', url: 'https://certificadommpp.seguridadvial.gob.ar/choferes' },
+          { nombre: 'Curso FPT (Sicapro)', url: 'https://sicapro.com.ar/consultasonline.aspx' }] },
+      { label: 'Psicofísico', vto: 'sep_vto', archivo: 'sep_archivo', lector: 'psicofisico',
+        consultas: [{ nombre: 'Psicofísicos', url: 'https://psicofisicos.com.ar/resultados-de-psicofisicos/' }] },
     ],
   },
   {

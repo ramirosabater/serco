@@ -383,3 +383,6 @@ label.campo input, label.campo select, label.campo textarea { min-width: 0; max-
 .viaje label.small { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
 .viaje label.small select { min-width: 0; flex: 1; }
 @media (max-width: 700px) { .campos { grid-template-columns: 1fr; } .plan-cfg { grid-template-columns: 1fr; } }
+.consultas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
+.consultas button.link { font-weight: 600; font-size: 12.5px; }
+tr.lectura td { border-bottom: 0; padding-top: 0; }
