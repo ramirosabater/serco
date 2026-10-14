@@ -28,12 +28,12 @@ export default function Manifiestos() {
     const soloNumero = /^[\d\s-]+$/.test(q)
     const corriente = /^y\d/i.test(q)
     const sel = `id, numero, fecha, tipo, anulado, etapa, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
-      manifiesto_items(estado, cantidad, um, corrientes(codigo))${corriente ? ', filtro:manifiesto_items!inner(corrientes!inner(codigo))' : ''}`
+      manifiesto_items(estado, cantidad, um, corrientes(codigo))${corriente ? ', filtro:manifiesto_items!inner(corrientes!inner(codigo))' : ''}${etapa ? ', et:manifiesto_etapas!inner(etapa)' : ''}`
     let c = supabase.from('manifiestos').select(sel, { count: 'exact' })
     if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`)
       : corriente ? c.ilike('filtro.corrientes.codigo', `${q.replace(/\s/g, '')}%`)
       : c.ilike('generadores.nombre', `%${q}%`)
-    if (etapa) c = c.eq('etapa', Number(etapa))
+    if (etapa) c = c.eq('et.etapa', Number(etapa))   // la etapa guardada (indexada), no la calculada
     if (desde) c = c.gte('fecha', desde)
     if (hasta) c = c.lte('fecha', hasta)
     if (!anulados) c = c.eq('anulado', false)
