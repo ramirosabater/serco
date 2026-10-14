@@ -386,3 +386,7 @@ label.campo input, label.campo select, label.campo textarea { min-width: 0; max-
 .consultas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .consultas a { font-weight: 600; font-size: 12.5px; }
 tr.lectura td { border-bottom: 0; padding-top: 0; }
+.aviso.st { background: var(--s1b); border-color: var(--s1); }
+nav.menu a.vista-cliente { margin-left: auto; border: 1px dashed var(--line); font-weight: 600; color: var(--mute); }
+nav.menu a.vista-cliente.active { border-style: solid; border-color: var(--acc); color: var(--on-acc); }
+@media (max-width: 700px) { nav.menu a.vista-cliente { margin-left: 0; } }

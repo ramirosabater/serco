@@ -96,6 +96,7 @@ export default function Layout() {
             ? <NavLink key={g.t} to={g.to} end>{g.t}</NavLink>
             : <Desplegable key={g.t} g={{ ...g, items: g.items!.filter((o) => !o.admin || perfil?.rol === 'admin') }} activo={activo(g)}
                 abierto={abierto === g.t} setAbierto={(v) => setAbierto(v ? g.t : null)} />)}
+          {perfil?.rol !== 'cliente' && <NavLink to="/vista-cliente" className="vista-cliente" title="Lo que ve un generador en su portal">Vista del cliente</NavLink>}
         </nav>
         <div className="usuario">
           <Ayuda />

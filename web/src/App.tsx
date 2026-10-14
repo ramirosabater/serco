@@ -54,6 +54,8 @@ function Rutas() {
         <Route path="planta" element={<Planta />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="nacion/:id" element={<NacionDetalle />} />
+        <Route path="vista-cliente" element={<PortalRetiros />} />
+        <Route path="vista-cliente/certificados" element={<PortalCertificados />} />
         <Route path="reportes" element={<Navigate to="/reportes/producto" replace />} />
         <Route path="reportes/:tipo" element={<Reportes />} />
         <Route path="vencimientos" element={<Vencimientos />} />
