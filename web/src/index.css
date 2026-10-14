@@ -7,6 +7,7 @@
   --haz: #C27A0E; --haz-soft: #FDF1DC; --bad: #C0392B; --bad-soft: #FCE6E3; --chip: #EEF3EC;
   /* etapas del residuo: almacenado, en tránsito, dispuesto, certificado */
   --lime: #A8D86A;
+  --si: #5B6B78; --sib: #E8EEF2;
   --s0: #B86E00; --s0b: #FDF0DA; --s1: #2E6DB4; --s1b: #E3EEFA; --s2: #6E9F1F; --s2b: #EEF6DD; --s3: #0B8A22; --s3b: #DDF2DF;
   color-scheme: light dark;
 }
@@ -15,6 +16,7 @@
     --bg: #101712; --card: #18221A; --ink: #E4EEE4; --mute: #9DB09F; --line: #2A3A2D;
     --acc: #5CC46E; --acc-soft: #1C3620; --on-acc: #0E1A10;
     --haz: #E6A948; --haz-soft: #3A2B10; --bad: #EC7A6E; --bad-soft: #3A1916; --chip: #223024;
+    --si: #A9B8C2; --sib: #22303A;
     --s0: #E6A948; --s0b: #3A2B10; --s1: #78A9E6; --s1b: #16273D; --s2: #B5D86F; --s2b: #26331A; --s3: #5CC46E; --s3b: #1C3620;
   }
 }
@@ -79,8 +81,9 @@ a.subnav.active { background: var(--acc); border-color: var(--acc); color: var(-
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 1px 2px rgba(20, 60, 20, 0.04); padding: 18px 20px; min-width: 0; }
 .grid { display: grid; gap: 16px; }
 .k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.k5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .c21 { grid-template-columns: 2fr 1fr; }
-@media (max-width: 900px) { .k4 { grid-template-columns: repeat(2, 1fr); } .c21 { grid-template-columns: 1fr; } main { padding: 20px 16px 50px; } header.top { padding: 10px 14px; flex-wrap: wrap; } }
+@media (max-width: 900px) { .k4, .k5 { grid-template-columns: repeat(2, 1fr); } .c21 { grid-template-columns: 1fr; } main { padding: 20px 16px 50px; } header.top { padding: 10px 14px; flex-wrap: wrap; } }
 .kpi .v { font-weight: 800; font-size: 36px; line-height: 1.05; color: var(--acc); }
 .kpi .l { color: var(--mute); font-size: 13.5px; }
 .kpi.alerta { border-color: var(--haz); background: var(--haz-soft); }
@@ -295,7 +298,7 @@ table.compacta th, table.compacta td { padding: 6px 8px; font-size: 13.5px; }
 @media print { .btn-ayuda, .ay-fondo, .ay-panel, .ay-foco, .ay-tarjeta { display: none !important; } }
 
 /* Tablero: barras por etapa y volumen mensual */
-.etapas-barras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: end; margin-top: 14px; }
+.etapas-barras { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; align-items: end; margin-top: 14px; }
 .etapas-barras button { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; padding: 6px; border-radius: 12px; font-weight: 400; }
 .etapas-barras button:hover { background: var(--sb); }
 .etapas-barras .v { font-size: 26px; font-weight: 800; color: var(--sc); line-height: 1.1; }
@@ -386,7 +389,8 @@ nav.menu .dd.open .dt.active { background: var(--acc); }
 label.campo input, label.campo select, label.campo textarea { min-width: 0; max-width: 100%; }
 .viaje label.small { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
 .viaje label.small select { min-width: 0; flex: 1; }
-@media (max-width: 700px) { .campos { grid-template-columns: 1fr; } .plan-cfg { grid-template-columns: 1fr; } }
+.renglon-sec3 { grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.3fr) auto; }
+@media (max-width: 700px) { .campos, .renglon-sec3 { grid-template-columns: 1fr; } .plan-cfg { grid-template-columns: 1fr; } }
 .consultas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .consultas a { font-weight: 600; font-size: 12.5px; }
 tr.lectura td { border-bottom: 0; padding-top: 0; }
@@ -397,7 +401,7 @@ nav.menu a.vista-cliente.active { border-style: solid; border-color: var(--acc);
 @media (max-width: 700px) { nav.menu a.vista-cliente { margin-left: 0; } }
 
 /* Etapa en miniatura (listas) */
-.mini { display: inline-flex; align-items: center; width: 120px; vertical-align: middle; }
+.mini { display: inline-flex; align-items: center; width: 140px; vertical-align: middle; }
 .mini .mini-p { display: flex; align-items: center; flex: 0 0 auto; }
 .mini .mini-p + .mini-p { flex: 1; }
 .mini i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); flex: none; }
@@ -407,7 +411,7 @@ nav.menu a.vista-cliente.active { border-style: solid; border-color: var(--acc);
 .etapa-celda { display: flex; align-items: center; gap: 14px; }
 
 /* Recorrido del residuo (estaciones unidas por una línea, como en el prototipo) */
-.ruta { display: grid; grid-template-columns: repeat(4, 1fr); margin: 18px 0 6px; }
+.ruta { display: grid; grid-template-columns: repeat(5, 1fr); margin: 18px 0 6px; }
 .estacion { position: relative; padding-top: 30px; }
 .estacion::before { content: ''; position: absolute; top: 9px; left: 0; right: 0; height: 4px; background: var(--line); }
 .estacion:first-child::before { left: 9px; }

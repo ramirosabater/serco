@@ -27,17 +27,18 @@ const totales = (l: { cantidad: number; um: UM }[]) =>
 export default function Planta() {
   const [sp, setSp] = useSearchParams()
   const v = sp.get('v')
-  const vista = v === 'transito' || v === 'nacion' ? v : 'armar'
+  const vista = v === 'transito' || v === 'nacion' || v === 'ingresar' ? v : 'armar'
   return (
     <>
       <h1>Planta</h1>
-      <p className="sub">Armá la carga a disposición final con lo que está almacenado y registrá el certificado cuando vuelve.</p>
+      <p className="sub">Registrá lo que entra (sección 3), armá la carga a disposición final con lo almacenado y registrá el certificado cuando vuelve.</p>
       <nav className="bar" aria-label="Planta" style={{ marginBottom: 18 }}>
+        <a href="?v=ingresar" data-ayuda="pl-tab-ingresar" className={`subnav ${vista === 'ingresar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'ingresar' }) }}>Por ingresar</a>
         <a href="?v=armar" className={`subnav ${vista === 'armar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({}) }}>Armar carga</a>
         <a href="?v=transito" data-ayuda="pl-tab-transito" className={`subnav ${vista === 'transito' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'transito' }) }}>Esperando certificado</a>
         <a href="?v=nacion" data-ayuda="pl-tab-nacion" className={`subnav ${vista === 'nacion' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'nacion' }) }}>Todos los Manifiestos Nación</a>
       </nav>
-      {vista === 'armar' ? <ArmarCarga /> : vista === 'transito' ? <EnTransitoLista /> : <NacionLista />}
+      {vista === 'ingresar' ? <PorIngresar /> : vista === 'armar' ? <ArmarCarga /> : vista === 'transito' ? <EnTransitoLista /> : <NacionLista />}
     </>
   )
 }
@@ -358,6 +359,52 @@ interface NacionFila {
 const POR_PAGINA = 50
 
 /** Todos los Manifiestos Nación, del más nuevo al más viejo */
+interface Iniciado { id: number; numero: string; fecha: string; tipo: string; generadores: { nombre: string } | null; generadores_principales: { nombre: string } | null
+  choferes: { nombre: string } | null; camiones: { patente: string } | null }
+const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
+
+/** Manifiestos emitidos (Iniciado) cuya carga todavía no se registró en planta: falta la sección 3 */
+function PorIngresar() {
+  const nav = useNavigate()
+  const [todos, setTodos] = useState(false)
+  const [lista, setLista] = useState<Iniciado[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    setLista(null)
+    let c = supabase.from('manifiestos').select('id, numero, fecha, tipo, generadores(nombre), generadores_principales(nombre), choferes(nombre), camiones(patente), et:manifiesto_etapas!inner(etapa)', { count: 'exact' })
+      .eq('et.etapa', 0).eq('anulado', false)
+    if (!todos) c = c.gte('fecha', haceDias(60))
+    c.order('fecha', { ascending: false }).order('numero', { ascending: false }).limit(200)
+      .then(({ data, count, error }) => { setError(mensajeError(error)); setLista((data ?? []) as unknown as Iniciado[]); setTotal(count ?? 0) })
+  }, [todos])
+  const dias = (f: string) => Math.round((new Date(hoy()).getTime() - new Date(f).getTime()) / 86400000)
+  return (
+    <>
+      <div className="bar" style={{ justifyContent: 'space-between' }}>
+        <span className="muted small">{lista ? `${num(total)} manifiestos iniciados${todos ? '' : ' en los últimos 60 días'}: falta cargar los residuos que entraron.` : ''}</span>
+        <label className="small"><input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} /> Ver también los más viejos</label>
+      </div>
+      {error && <div className="aviso bad" style={{ marginBottom: 12 }}>{error}</div>}
+      <div className="card" data-ayuda="pl-ingresar">
+        {!lista ? <p className="cargando">Cargando…</p> : lista.length === 0 ? <p className="vacio">No hay cargas esperando ingreso. Todo lo emitido ya tiene sus residuos cargados.</p> : (
+          <div className="tw"><table>
+            <thead><tr><th>Manifiesto</th><th>Retiro</th><th>Generador</th><th>Planta</th><th>Camión · chofer</th><th></th></tr></thead>
+            <tbody>{lista.map((m) => (
+              <tr key={m.id} className="fila" tabIndex={0} onClick={() => nav(`/manifiestos/${m.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/manifiestos/${m.id}`)}>
+                <td className="nw"><b>{fnum(m.numero)}</b>{m.tipo === 'rosa' && <div className="muted small">formulario rosa</div>}</td>
+                <td className="nw">{fd(m.fecha)}<div className="muted small">{dias(m.fecha) === 0 ? 'hoy' : `hace ${dias(m.fecha)} días`}</div></td>
+                <td>{m.generadores?.nombre}</td><td>{m.generadores_principales?.nombre ?? '—'}</td>
+                <td>{[m.camiones?.patente, m.choferes?.nombre].filter(Boolean).join(' · ') || '—'}</td>
+                <td className="nw"><button className="pri" onClick={(e) => { e.stopPropagation(); nav(`/manifiestos/${m.id}`) }}>Cargar residuos</button></td>
+              </tr>))}
+            </tbody>
+          </table></div>)}
+      </div>
+    </>
+  )
+}
+
 function NacionLista() {
   const nav = useNavigate()
   const [q, setQ] = useState('')

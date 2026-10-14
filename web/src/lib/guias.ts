@@ -37,8 +37,17 @@ export const GUIAS: Guia[] = [
       { ruta: '/manifiestos/nuevo', sel: 'nm-numero', titulo: 'Número del formulario', texto: 'El sistema sugiere el número que sigue. Comparalo con el formulario azul que tenés en la mano antes de seguir.' },
       { sel: 'nm-generador', titulo: 'Generador', texto: 'Empezá a escribir el nombre o el CUIT y elegilo de la lista. Después elegí la dirección de retiro.' },
       { sel: 'nm-flota', titulo: 'Camión y chofer', texto: 'Si el camión, el chofer, el transportista o el generador tienen algo vencido, aparece en rojo acá y el sistema no deja emitir. Se arregla en Vencimientos.' },
-      { sel: 'nm-residuos', titulo: 'Residuos', texto: 'Una fila por corriente: código, contenedor y cantidad. Entran hasta 7, como en el papel. Si alguna corriente no está habilitada, el sistema lo avisa antes de emitir.' },
-      { sel: 'nm-emitir', titulo: 'Emitir', texto: 'Al emitir queda registrado y "Almacenado" en planta. Después podés imprimirlo en el formulario azul.' },
+      { sel: 'nm-instrucciones', titulo: 'Instrucciones (secciones 4 y 5)', texto: 'Vienen con los valores de siempre. Cambialas solo si este retiro es distinto.', falta: 'Esta parte aparece solo en el formulario azul de Serco.' },
+      { sel: 'nm-residuos', titulo: 'Residuos: después', texto: 'Los residuos (sección 3) no se cargan ahora: se cargan cuando la carga entra a planta, desde Planta → Por ingresar.' },
+      { sel: 'nm-emitir', titulo: 'Emitir', texto: 'El manifiesto queda "Iniciado". Con "Emitir e imprimir" salen las secciones 1, 2, 4 y 5 sobre el formulario azul.' },
+    ],
+  },
+  {
+    id: 'ingreso', titulo: 'Registrar el ingreso a planta (sección 3)', grupo: 'Planta', pantalla: /^\/(planta|manifiestos\/\d+)$/, roles: EDITAN,
+    pasos: [
+      { ruta: '/planta?v=ingresar', sel: 'pl-ingresar', titulo: 'Por ingresar', texto: 'Acá están los manifiestos emitidos que todavía no tienen residuos cargados. Tocá "Cargar residuos" en el que llegó.' , alTocar: true },
+      { sel: 'det-sec3', titulo: 'Sección 3', texto: 'Una fila por corriente: contenedor, cantidad estimada (la del remito) y real (la pesada o medida en planta). Entran hasta 7, como en el papel. Poné la fecha en que entró.', falta: 'Abrí un manifiesto "Iniciado" de la lista y la guía sigue sola.' },
+      { sel: 'det-sec3', titulo: 'Guardar', texto: 'Al guardar pasa a "Almacenado" y empieza a contar el plazo en planta desde la fecha de ingreso. Después podés imprimir la sección 3 en el formulario y las etiquetas QR.' },
     ],
   },
   {
@@ -64,7 +73,7 @@ export const GUIAS: Guia[] = [
     id: 'recorrido', titulo: 'Ver en qué etapa está un residuo', grupo: 'Manifiestos', pantalla: /^\/manifiestos(\/\d+)?$/, roles: INTERNOS,
     pasos: [
       { ruta: '/manifiestos', sel: 'man-buscar', titulo: 'Buscar el manifiesto', texto: 'Escribí el número o el generador y abrí el manifiesto.' },
-      { sel: 'det-recorrido', titulo: 'Recorrido', texto: 'Almacenado en planta, en tránsito a disposición final, dispuesto y certificado. Abajo, cada residuo con su manifiesto Nación y su certificado.', falta: ABRIR_MANIFIESTO },
+      { sel: 'det-recorrido', titulo: 'Recorrido', texto: 'Iniciado (emitido, faltan los residuos), almacenado en planta, en tránsito a disposición final, dispuesto y certificado. Abajo, cada residuo con su manifiesto Nación y su certificado.', falta: ABRIR_MANIFIESTO },
     ],
   },
   {

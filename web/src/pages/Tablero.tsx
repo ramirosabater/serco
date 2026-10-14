@@ -8,7 +8,7 @@ import type { Alerta, Manifiesto } from '../lib/tipos'
 import { MiniEtapa, PillEtapa } from '../components/Etapa'
 
 interface Resumen {
-  etapas: [number, number, number, number]
+  etapas: [number, number, number, number, number]
   kgs: number
   generadores: number
   meses: { mes: string; kgs: number; lts: number }[]
@@ -44,7 +44,7 @@ export default function Tablero() {
     ]).then(([a, b]) => setAlertas([...(a.data ?? []), ...(b.data ?? [])].slice(0, 8) as Alerta[]))
   }, [])
 
-  const sinDisposicion = res ? res.etapas[0] + res.etapas[1] : 0
+  const sinDisposicion = res ? res.etapas[0] + res.etapas[1] + res.etapas[2] : 0
   const anio = desde.slice(0, 4) === hasta.slice(0, 4) && desde.endsWith('-01-01') ? `en ${desde.slice(0, 4)}` : `del ${fd(desde)} al ${fd(hasta)}`
   return (
     <>
@@ -54,7 +54,7 @@ export default function Tablero() {
         <Link to={`/manifiestos?desde=${desde}&hasta=${hasta}`} className="card kpi"><div className="v">{res ? num(res.etapas.reduce((a, b) => a + b, 0)) : '…'}</div><div className="l">manifiestos {anio}</div></Link>
         <div className="card kpi"><div className="v">{res ? `${num(Math.round(res.kgs / 1000))} t` : '…'}</div><div className="l">de residuos sólidos y semisólidos</div></div>
         <div className="card kpi"><div className="v">{res ? num(res.generadores) : '…'}</div><div className="l">generadores atendidos</div></div>
-        <Link to={`/manifiestos?etapa=0&desde=${desde}&hasta=${hasta}`} className={`card kpi ${sinDisposicion ? 'alerta' : ''}`}><div className="v">{num(sinDisposicion)}</div><div className="l">manifiestos sin disposición final</div></Link>
+        <Link to="/planta" className={`card kpi ${sinDisposicion ? 'alerta' : ''}`}><div className="v">{num(sinDisposicion)}</div><div className="l">manifiestos sin disposición final</div></Link>
       </div>
 
       <div className="card mt" data-ayuda="tab-etapas">

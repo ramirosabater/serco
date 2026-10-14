@@ -58,10 +58,11 @@ export default function Manifiestos() {
         <input type="search" data-ayuda="man-buscar" placeholder="Buscar por número, generador o corriente" value={texto} onChange={(e) => setTexto(e.target.value)} style={{ flex: 1, minWidth: 220 }} aria-label="Buscar" />
         <select value={etapa} onChange={(e) => cambiar('etapa', e.target.value)} aria-label="Etapa">
           <option value="">Todas las etapas</option>
-          <option value="0">Almacenado</option>
-          <option value="1">En tránsito</option>
-          <option value="2">Dispuesto</option>
-          <option value="3">Certificado entregado</option>
+          <option value="0">Iniciado (falta la sección 3)</option>
+          <option value="1">Almacenado</option>
+          <option value="2">En tránsito</option>
+          <option value="3">Dispuesto</option>
+          <option value="4">Certificado entregado</option>
         </select>
         <label className="small">Desde <input type="date" value={desde} onChange={(e) => cambiar('desde', e.target.value)} /></label>
         <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => cambiar('hasta', e.target.value)} /></label>

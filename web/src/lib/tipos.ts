@@ -13,6 +13,7 @@ export interface Item {
   corriente_id: number
   contenedor: string | null
   cantidad: number
+  cant_estimada?: number | null
   um: UM
   estado: EstadoResiduo
   fecha_entrega_df: string | null
@@ -33,9 +34,10 @@ export interface Manifiesto {
   escaneo: string | null
   validacion_omitida?: string | null
   instrucciones?: Instrucciones | null
-  /** Etapa calculada en la base: 0 almacenado, 1 en tránsito, 2 dispuesto, 3 certificado entregado */
+  /** Etapa guardada en la base: 0 iniciado, 1 almacenado, 2 en tránsito, 3 dispuesto, 4 certificado entregado */
   etapa?: number
   creado?: string
+  ingreso_planta?: string | null
   generadores?: { id: number; nombre: string; cuit: string | null } | null
   generadores_principales?: { nombre: string } | null
   transportistas?: { id: number; nombre: string } | null

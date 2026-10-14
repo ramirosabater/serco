@@ -30,6 +30,7 @@ export default function Layout() {
   const { perfil, salir } = useAuth()
   const [vencidos, setVencidos] = useState(0)
   const [esperando, setEsperando] = useState(0)
+  const [porIngresar, setPorIngresar] = useState(0)
   const [abierto, setAbierto] = useState<string | null>(null)
   const { pathname, search } = useLocation()
   const nav = useRef<HTMLElement>(null)
@@ -44,6 +45,10 @@ export default function Layout() {
     supabase.from('manifiestos_nacion').select('id, manifiesto_items!inner(id)', { count: 'exact', head: true })
       .eq('manifiesto_items.estado', 'en_transito')
       .then(({ count }) => setEsperando(count ?? 0))
+    const d = new Date(); d.setDate(d.getDate() - 60)
+    supabase.from('manifiestos').select('id, et:manifiesto_etapas!inner(etapa)', { count: 'exact', head: true })
+      .eq('et.etapa', 0).eq('anulado', false).gte('fecha', d.toISOString().slice(0, 10))
+      .then(({ count }) => setPorIngresar(count ?? 0))
   }, [pathname, search, perfil?.rol])
 
   useEffect(() => {
@@ -61,7 +66,8 @@ export default function Layout() {
       { to: '/manifiestos', b: 'Buscar manifiestos', s: 'Recorrido de cada residuo' },
       { to: '/agenda', b: 'Agenda', s: 'Retiros y vencimientos del mes' },
     ] },
-    { t: 'Planta', base: ['/planta', '/nacion'], n: esperando, items: [
+    { t: 'Planta', base: ['/planta', '/nacion'], n: esperando + porIngresar, items: [
+      { to: '/planta?v=ingresar', b: 'Por ingresar', s: 'Cargar los residuos que llegan (sección 3)', n: porIngresar },
       { to: '/planta', b: 'Armar viajes', s: 'Lo almacenado, en viajes a disposición final' },
       { to: '/planta?v=transito', b: 'Esperando certificado', s: 'Registrar el certificado del operador', n: esperando },
       { to: '/planta?v=nacion', b: 'Manifiestos Nación', s: 'Todos los envíos y sus certificados' },

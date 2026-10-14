@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, num, umL } from '../lib/formato'
@@ -63,6 +63,9 @@ export default function ImprimirManifiesto() {
   const [guia, setGuia] = useState(true)
   const [escala, setEscala] = useState(1)
   const marco = useRef<HTMLDivElement>(null)
+  const [sp] = useSearchParams()
+  // Qué secciones salen: al emitir la 1, 2, 4 y 5 (más fechas); al entrar a planta, la 3 (residuos)
+  const [que, setQue] = useState<'sin3' | '3' | 'todo' | ''>(sp.get('que') === '3' ? '3' : '')
 
   useEffect(() => {
     supabase.from('manifiestos').select(SELECT).eq('id', Number(id)).maybeSingle()
@@ -93,6 +96,8 @@ export default function ImprimirManifiesto() {
   const unaLinea = lineas.reduce((a, l) => a + l.length, 0) > RENGLONES
   // Bloque 4: las del manifiesto; si no tiene (los del Access), las de Configuración → Parámetros
   const ins = m.instrucciones ?? instruccionesPorDefecto(p)
+  const parte = que || (items.length ? 'todo' : 'sin3')
+  const con3 = parte !== 'sin3', conResto = parte !== '3'
 
   const filas: ReactNode[] = []
   let r = 0
@@ -115,6 +120,7 @@ export default function ImprimirManifiesto() {
 
   const datos = (
     <>
+      {conResto && <>
       {/* 1. Datos identificatorios */}
       <F x={85.5} y={60.6} w={25.5} t={g?.nombre} c={ajuste(g?.nombre, 20)} />
       <F x={112} y={60.9} w={26} t={cuitF(g?.cuit)} />
@@ -133,8 +139,10 @@ export default function ImprimirManifiesto() {
       <F x={41} y={98.2} w={53} t={ch?.nombre} />
       <F x={115} y={100.2} w={26} t={ch?.carnet_nro ?? ''} />
       <F x={160} y={98.2} w={32} t={ch?.carga_pel_vto ? fd(ch.carga_pel_vto) : ''} />
+      </>}
       {/* 3. Residuos */}
-      {filas}
+      {con3 && filas}
+      {conResto && <>
       {/* 4. Instrucciones de manipulación */}
       <F x={67} y={158} w={40} t={ins.inhalacion} />
       <F x={67} y={162.5} w={40} t={ins.dermica} />
@@ -152,12 +160,14 @@ export default function ImprimirManifiesto() {
       <F x={19} y={268.8} w={64} t={d} />
       <F x={19} y={272.8} w={66} t={[m.direccion_retiro, g?.ciudad].filter(Boolean).join(' · ')} c={ajuste([m.direccion_retiro, g?.ciudad].filter(Boolean).join(' · '), 44)} />
       <F x={87} y={273} w={60} t={d} />
+      </>}
     </>
   )
 
   const hoja: CSSProperties = { transform: `scale(${escala})`, transformOrigin: 'top left' }
   const avisos = [
-    items.length > RENGLONES && `El manifiesto tiene ${items.length} residuos y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
+    con3 && !items.length && 'Todavía no se cargaron los residuos (sección 3): esa parte sale en blanco.',
+    con3 && items.length > RENGLONES && `El manifiesto tiene ${items.length} residuos y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
     !g?.cuit && 'El generador no tiene CUIT cargado.',
     !ca?.carga_pel_nro && 'El camión no tiene número de registro de carga peligrosa.',
     !ch?.carnet_nro && 'El chofer no tiene número de licencia cargado.',
@@ -184,6 +194,12 @@ export default function ImprimirManifiesto() {
         <div className="card stack no-imprimir" style={{ alignSelf: 'start' }} data-ayuda="imp-panel">
           <h2 style={{ margin: 0 }}>Antes de imprimir</h2>
           <p className="small muted" style={{ margin: 0 }}>Poné el formulario azul en la bandeja. Imprimí en A4, a escala 100 % y sin márgenes.</p>
+          <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 4 }} data-ayuda="imp-que">
+            <legend className="small muted" style={{ marginBottom: 4 }}>Qué imprimir</legend>
+            <label className="small"><input type="radio" name="que" checked={parte === 'sin3'} onChange={() => setQue('sin3')} /> Al emitir: secciones 1, 2, 4 y 5</label>
+            <label className="small"><input type="radio" name="que" checked={parte === '3'} onChange={() => setQue('3')} disabled={!items.length} /> Al entrar a planta: solo la sección 3 (residuos)</label>
+            <label className="small"><input type="radio" name="que" checked={parte === 'todo'} onChange={() => setQue('todo')} /> Todo el formulario</label>
+          </fieldset>
           {avisos.length > 0 && <div className="aviso haz small"><ul style={{ margin: 0, paddingLeft: 18 }}>{avisos.map((a) => <li key={a}>{a}</li>)}</ul></div>}
           <label className="campo" data-ayuda="imp-calib">Mover a la derecha (mm)
             <input type="number" step="0.5" value={calib.x} onChange={(e) => setCalib({ ...calib, x: Number(e.target.value) || 0 })} /></label>

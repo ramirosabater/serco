@@ -37,6 +37,10 @@ export default function Etiquetas() {
 
   if (error) return <p className="aviso bad">{error}</p>
   if (!m) return <p className="cargando">Preparando las etiquetas…</p>
+  if (!m.manifiesto_items.length) return <>
+    <p><Link to={`/manifiestos/${m.id}`}>Volver al manifiesto</Link></p>
+    <div className="aviso haz">El manifiesto {fnum(m.numero)} todavía no tiene residuos: las etiquetas se imprimen después de cargar la sección 3, cuando la carga entra a planta.</div>
+  </>
 
   const etiquetas = m.manifiesto_items.flatMap((i) => {
     const n = copias[i.id] ?? 1

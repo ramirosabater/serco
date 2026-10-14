@@ -3,18 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, hoy } from '../lib/formato'
-import type { Instrucciones, UM } from '../lib/tipos'
+import type { Instrucciones } from '../lib/tipos'
 import { INSTRUCTIVOS, instruccionesPorDefecto, NIVELES, PELIGROS } from '../lib/instrucciones'
 import { useAuth } from '../auth/AuthProvider'
 
 interface Transp { id: number; nombre: string; emite_manifiestos: boolean }
 interface Gen { id: number; nombre: string; cuit: string | null; generador_principal_id: number | null; hab_mun_vto: string | null; actividad: string | null }
 interface Flota { id: number; nombre: string; activo: boolean; vtos: (string | null)[] }
-interface Corriente { id: number; codigo: string; descripcion: string | null; um: UM | null }
-interface Renglon { corriente_id: string; contenedor: string; cantidad: string; um: UM }
-
-const CONTENEDORES = ['BATEA', 'TAMBORES', 'TANQUE', 'PILETA', 'BOLSAS', 'MAXIBIDON', 'BOLSONES', 'LATAS', 'GRANEL']
-const renglonVacio = (): Renglon => ({ corriente_id: '', contenedor: '', cantidad: '', um: 'KGS' })
 
 /** "al día", "vencido" o "sin cargar" según los vencimientos de un chofer o camión */
 function estadoFlota(f: Flota, fecha: string) {
@@ -32,7 +27,6 @@ export default function NuevoManifiesto() {
   const [transportistas, setTransportistas] = useState<Transp[]>([])
   const [generadores, setGeneradores] = useState<Gen[]>([])
   const [plantas, setPlantas] = useState<{ id: number; nombre: string }[]>([])
-  const [corrientes, setCorrientes] = useState<Corriente[]>([])
   const [choferes, setChoferes] = useState<Flota[]>([])
   const [camiones, setCamiones] = useState<Flota[]>([])
   const [direcciones, setDirecciones] = useState<string[]>([])
@@ -47,7 +41,6 @@ export default function NuevoManifiesto() {
   const [chofer, setChofer] = useState('')
   const [camion, setCamion] = useState('')
   const [nota, setNota] = useState('')
-  const [renglones, setRenglones] = useState<Renglon[]>([renglonVacio()])
   const [problemas, setProblemas] = useState<string[]>([])
   const [forzar, setForzar] = useState(false)
   const [motivo, setMotivo] = useState('')
@@ -73,8 +66,6 @@ export default function NuevoManifiesto() {
       .then(({ data }) => setGeneradores(data))
     supabase.from('generadores_principales').select('id, nombre').eq('activo', true).order('nombre')
       .then(({ data }) => setPlantas(data ?? []))
-    supabase.from('corrientes').select('id, codigo, descripcion, um').eq('activa', true).order('codigo')
-      .then(({ data }) => setCorrientes((data ?? []) as Corriente[]))
     supabase.from('parametros').select('clave, valor').like('clave', 'form_%')
       .then(({ data }) => setInstr(instruccionesPorDefecto(Object.fromEntries((data ?? []).map((x) => [x.clave, x.valor])))))
   }, [])
@@ -107,15 +98,12 @@ export default function NuevoManifiesto() {
     }).then(({ data }) => setProblemas((data as string[]) ?? []))
   }, [esAzul, transportista, generador, chofer, camion, fecha])
 
-  const setRenglon = (k: number, cambio: Partial<Renglon>) => setRenglones((rs) => rs.map((r, i) => (i === k ? { ...r, ...cambio } : r)))
   const bloqueado = problemas.length > 0 && !(esAdmin && forzar && motivo.trim())
 
   async function emitir(e: FormEvent) {
     e.preventDefault()
     setError('')
     if (!generador) { setError('Elegí el generador de la lista.'); return }
-    const items = renglones.filter((r) => r.corriente_id && r.cantidad)
-    if (!items.length) { setError('Cargá al menos un residuo con su cantidad.'); return }
     setEnviando(true)
     const { data, error } = await supabase.rpc('emitir_manifiesto', {
       p: {
@@ -124,7 +112,7 @@ export default function NuevoManifiesto() {
         chofer_id: chofer ? Number(chofer) : null, camion_id: camion ? Number(camion) : null, nota: nota || null,
         validacion_omitida: problemas.length && forzar ? motivo.trim() : null,
         instrucciones: esAzul ? instr : null,
-        items: items.map((r) => ({ corriente_id: Number(r.corriente_id), contenedor: r.contenedor || null, cantidad: Number(r.cantidad.replace(',', '.')), um: r.um })),
+        items: [],
       },
     })
     setEnviando(false)
@@ -139,11 +127,11 @@ export default function NuevoManifiesto() {
     <form onSubmit={emitir}>
       <p><Link to="/manifiestos">Volver a manifiestos</Link></p>
       <h1>Nuevo manifiesto</h1>
-      <p className="sub">{esAzul ? 'Se imprime sobre el formulario azul. A mano queda solo la firma.' : 'Manifiesto de otro transportista (formulario rosa): se registra con el número de su formulario.'}</p>
+      <p className="sub">{esAzul ? 'Se cargan las secciones 1, 2, 4 y 5 y se imprimen sobre el formulario azul. La sección 3 (residuos) se carga al entrar a planta.' : 'Manifiesto de otro transportista (formulario rosa): se registra con el número de su formulario. Los residuos se cargan al entrar a planta.'}</p>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 14 }}>{error}</div>}
 
       <div className="card stack" data-ayuda="nm-formulario">
-        <h2 className="paso-h"><span className="sn">1</span>Formulario y retiro</h2>
+        <h2 className="paso-h"><span className="sn">1</span>Formulario y retiro <small className="muted">· sección 1</small></h2>
         <div className="campos">
           <label className="campo">Transportista
             <select value={transportista} onChange={(e) => setTransportista(e.target.value)} required>
@@ -179,7 +167,7 @@ export default function NuevoManifiesto() {
       </div>
 
       <div className="card stack mt" data-ayuda="nm-flota">
-        <h2 className="paso-h"><span className="sn">2</span>Camión y chofer</h2>
+        <h2 className="paso-h"><span className="sn">2</span>Camión y chofer <small className="muted">· sección 2</small></h2>
         <div className="campos">
           <label className="campo">Camión
             <select value={camion} onChange={(e) => setCamion(e.target.value)} required={esAzul}>
@@ -208,7 +196,7 @@ export default function NuevoManifiesto() {
       </div>
 
       {esAzul && <div className="card stack mt" data-ayuda="nm-instrucciones">
-        <h2 className="paso-h"><span className="sn">3</span>Instrucciones de manipulación</h2>
+        <h2 className="paso-h"><span className="sn">3</span>Instrucciones de manipulación <small className="muted">· secciones 4 y 5</small></h2>
         <div className="campos">{(['inhalacion', 'dermica', 'oral'] as const).map((k) => (
           <label key={k} className="campo">Toxicidad {k === 'inhalacion' ? 'por inhalación' : k === 'dermica' ? 'dérmica' : 'oral'}
             <select value={instr[k]} onChange={(e) => setInstr({ ...instr, [k]: e.target.value })}>{NIVELES.map((n) => <option key={n}>{n}</option>)}</select>
@@ -228,34 +216,8 @@ export default function NuevoManifiesto() {
       </div>}
 
       <div className="card stack mt" data-ayuda="nm-residuos">
-        <h2 className="paso-h"><span className="sn">{esAzul ? 4 : 3}</span>Residuos</h2>
-        {renglones.map((r, k) => (
-          <div key={k} className="campos" style={{ alignItems: 'end' }}>
-            <label className="campo">Corriente
-              <select value={r.corriente_id} onChange={(e) => {
-                const c = corrientes.find((x) => String(x.id) === e.target.value)
-                setRenglon(k, { corriente_id: e.target.value, um: c?.um ?? r.um })
-              }} required={k === 0}>
-                <option value="">Elegí la corriente</option>
-                {corrientes.map((c) => <option key={c.id} value={c.id}>{c.codigo}{c.descripcion ? ` · ${c.descripcion.slice(0, 60)}` : ''}</option>)}
-              </select>
-            </label>
-            <label className="campo">Contenedor
-              <input list="lista-contenedores" value={r.contenedor} onChange={(e) => setRenglon(k, { contenedor: e.target.value.toUpperCase() })} />
-            </label>
-            <label className="campo">Cantidad
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input value={r.cantidad} onChange={(e) => setRenglon(k, { cantidad: e.target.value })} inputMode="decimal" required={k === 0} style={{ flex: 1 }} />
-                <select value={r.um} onChange={(e) => setRenglon(k, { um: e.target.value as UM })} aria-label="Unidad">
-                  <option value="KGS">kg</option><option value="LTS">litros</option><option value="MS3">m³</option>
-                </select>
-              </div>
-            </label>
-            <div>{renglones.length > 1 && <button type="button" onClick={() => setRenglones((rs) => rs.filter((_, i) => i !== k))}>Quitar</button>}</div>
-          </div>))}
-        <datalist id="lista-contenedores">{CONTENEDORES.map((c) => <option key={c} value={c} />)}</datalist>
-        <div><button type="button" onClick={() => setRenglones((rs) => [...rs, renglonVacio()])} disabled={renglones.length >= 7}>Agregar otro residuo</button>
-          {renglones.length >= 7 && <span className="muted small"> El formulario tiene 7 renglones.</span>}</div>
+        <h2 className="paso-h"><span className="sn">{esAzul ? 4 : 3}</span>Residuos: se cargan al entrar a planta <small className="muted">· sección 3</small></h2>
+        <p className="muted small" style={{ margin: 0 }}>El manifiesto queda <b>Iniciado</b>. La sección 3 (corriente, contenedor y cantidad) se completa cuando la carga llega a planta, desde <b>Planta → Por ingresar</b> o desde el mismo manifiesto. Ahí pasa a <b>Almacenado</b>.</p>
         <label className="campo">Nota (opcional)
           <textarea value={nota} onChange={(e) => setNota(e.target.value)} />
         </label>

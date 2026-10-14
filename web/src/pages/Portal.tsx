@@ -100,7 +100,7 @@ export function PortalRetiros() {
             : <div className="card kpi"><div className="v">{new Set(items.map((i) => i.corrientes?.codigo)).size}</div><div className="l">tipos de residuo</div></div>}
           <div className="card kpi"><div className="v">{ultimo ? fd(ultimo).slice(0, 5) : '—'}</div><div className="l">último retiro</div></div>
         </div>
-        <div className="grid k4 mt etapas-portal">{[0, 1, 2, 3].map((k) => (
+        <div className="grid k5 mt etapas-portal">{[0, 1, 2, 3, 4].map((k) => (
           <button key={k} className={`card kpi ${etapa === k ? 'sel' : ''}`} style={colorEtapa(k)} aria-pressed={etapa === k} onClick={() => setEtapa(etapa === k ? null : k)}>
             <div className="v">{num(etapas.filter((e) => e === k).length)}</div><div className="l">{ETAPAS[k]}</div>
           </button>))}
