@@ -59,8 +59,10 @@ function CampoInput({ c, v, set, refs, soloLectura }: { c: Campo; v: unknown; se
   )
 }
 
-function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
+function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGuardado }: {
   d: Documento; valores: Valores; set: (k: string, v: unknown) => void; tabla: string; id: number | null; soloLectura: boolean; onError: (s: string) => void
+  /** Lo que ya quedó grabado en la base al subir el archivo (no queda como "cambio sin guardar") */
+  onGuardado: (cambios: Valores) => void
 }) {
   const [subiendo, setSubiendo] = useState(false)
   const vto = valores[d.vto] as string | null
@@ -74,6 +76,7 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
     if (!id || !d.archivo) { onError('Guardá primero la ficha y después subí el archivo.'); return }
     setLectura(null)
     let vence = vto
+    const leido: Valores = {}
     // Certificados que el sistema sabe leer: se controla el DNI y se toma el vencimiento
     if (d.lector) {
       setSubiendo(true)
@@ -90,19 +93,21 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
         return
       }
       if (l?.vence) vence = l.vence
-      setLectura(l ? { ok: true, t: `Leído del certificado${l.nombre ? ` de ${l.nombre}` : ''}: ${l.detalle}.${l.vence && l.vence !== vto ? ' Se cargó el vencimiento: tocá "Guardar cambios".' : ''}` }
+      setLectura(l ? { ok: true, t: `Leído del certificado${l.nombre ? ` de ${l.nombre}` : ''}: ${l.detalle}.${l.vence && l.vence !== vto ? ' Quedó guardado el vencimiento.' : ''}` }
         : { ok: false, t: 'No se pudo leer el certificado: se sube igual, cargá el vencimiento a mano.' })
-      if (l?.vence && l.vence !== vto) set(d.vto, l.vence)
-      if (l?.dni && !valores.dni && 'dni' in valores) set('dni', l.dni)
+      if (l?.vence) leido[d.vto] = l.vence
+      if (l?.dni && !valores.dni && 'dni' in valores) leido.dni = l.dni
     }
     setSubiendo(true)
     const ext = (f.name.split('.').pop() || 'pdf').toLowerCase()
     const ruta = `habilitaciones/${tabla}/${id}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('documentos').upload(ruta, f, { upsert: false, contentType: f.type || undefined })
     if (error) { onError('No se pudo subir el archivo: ' + mensajeError(error)); setSubiendo(false); return }
-    const { error: e2 } = await supabase.from(tabla).update({ [d.archivo]: ruta }).eq('id', id)
+    // El archivo y lo leído del certificado (vencimiento, DNI) se graban juntos
+    const cambios: Valores = { [d.archivo]: ruta, ...leido }
+    const { error: e2 } = await supabase.from(tabla).update(cambios).eq('id', id)
     setSubiendo(false)
-    if (e2) onError(mensajeError(e2)); else set(d.archivo, ruta)
+    if (e2) { onError(mensajeError(e2)); setLectura(null) } else onGuardado(cambios)
   }
 
   /** Al tocar el enlace a la consulta oficial se copia el DNI (el enlace abre la página en otra pestaña por sí solo) */
@@ -234,7 +239,8 @@ export default function AltasFicha() {
           <h2>Documentos y vencimientos</h2>
           <div className="tw"><table>
             <thead><tr><th>Documento</th><th>Número</th><th>Vence</th><th>Estado</th><th>Escaneo</th></tr></thead>
-            <tbody>{e.documentos.map((d) => <FilaDocumento key={d.vto} d={d} valores={valores} set={set} tabla={e.tabla} id={id} soloLectura={soloLectura} onError={setError} />)}</tbody>
+            <tbody>{e.documentos.map((d) => <FilaDocumento key={d.vto} d={d} valores={valores} set={set} tabla={e.tabla} id={id} soloLectura={soloLectura} onError={setError}
+              onGuardado={(c) => { setOriginal((o) => ({ ...o, ...c })); setValores((v) => ({ ...v, ...c })) }} />)}</tbody>
           </table></div>
         </div>)}
 
