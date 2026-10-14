@@ -87,7 +87,7 @@ export const ENTIDADES: Entidad[] = [
         consultas: [{ nombre: 'Seguridad Vial', url: 'https://certificadommpp.seguridadvial.gob.ar/choferes' },
           { nombre: 'Curso FPT (Sicapro)', url: 'https://sicapro.com.ar/consultasonline.aspx' }] },
       { label: 'Psicofísico', vto: 'sep_vto', archivo: 'sep_archivo', lector: 'psicofisico',
-        consultas: [{ nombre: 'Psicofísicos', url: 'https://psicofisicos.com.ar/resultados-de-psicofisicos/' }] },
+        consultas: [{ nombre: 'Psicofísicos', url: 'https://consultas.psicofisicos.com.ar/ConsultasOnLine.aspx' }] },
     ],
   },
   {

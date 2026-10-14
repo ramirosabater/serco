@@ -105,11 +105,10 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
     if (e2) onError(mensajeError(e2)); else set(d.archivo, ruta)
   }
 
-  /** Copia el DNI y abre la consulta oficial (la persona completa el captcha y baja el certificado) */
-  async function consultar(url: string) {
-    if (dniFicha) { try { await navigator.clipboard.writeText(dniFicha) } catch { /* sin portapapeles */ } }
-    window.open(url, '_blank', 'noopener')
-    setLectura({ ok: true, t: dniFicha ? `DNI ${dniFicha} copiado: pegalo en la página, tildá "No soy un robot", bajá el certificado y subilo acá.` : 'Cargá el DNI del chofer en Datos para copiarlo directo.' })
+  /** Al tocar el enlace a la consulta oficial se copia el DNI (el enlace abre la página en otra pestaña por sí solo) */
+  function copiarDni() {
+    if (dniFicha) navigator.clipboard?.writeText(dniFicha).catch(() => { /* sin portapapeles */ })
+    setLectura({ ok: true, t: dniFicha ? `DNI ${dniFicha} copiado: en la página que se abrió, pegalo (Ctrl+V), tildá "No soy un robot", bajá el certificado y subilo acá.` : 'Cargá el DNI del chofer en Datos para que se copie solo.' })
   }
 
   async function ver() {
@@ -124,7 +123,7 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError }: {
     <tr>
       <td><b>{d.label}</b>
         {d.consultas && !soloLectura && <div className="consultas">{d.consultas.map((c) => (
-          <button key={c.url} type="button" className="link small" onClick={() => consultar(c.url)} title="Copia el DNI y abre la página oficial">Consultar en {c.nombre}</button>))}
+          <a key={c.url} href={c.url} target="_blank" rel="noopener noreferrer" onClick={copiarDni} title="Abre la página oficial en otra pestaña y copia el DNI">Consultar en {c.nombre} ↗</a>))}
         </div>}
       </td>
       <td>{d.nro ? <input value={(valores[d.nro] as string) ?? ''} onChange={(e) => set(d.nro!, e.target.value || null)} disabled={soloLectura} aria-label={`Número de ${d.label}`} style={{ width: '100%', minWidth: 110 }} /> : <span className="muted">—</span>}</td>
