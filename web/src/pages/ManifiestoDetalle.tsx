@@ -66,10 +66,16 @@ export default function ManifiestoDetalle() {
       {m.validacion_omitida && <div className="aviso haz" style={{ marginBottom: 12 }}>Emitido con vencimientos sin regularizar. Motivo: {m.validacion_omitida}</div>}
 
       {!m.anulado && <div className="card" data-ayuda="det-recorrido"><h2>Recorrido del residuo</h2>
-        <div className="recorrido">{ETAPAS.map((t, k) => (
-          <div key={t} className={`paso ${k <= etapa ? 'hecho' : ''}`} style={colorEtapa(k)}>
-            <div className="t">{t}</div><div className="m">{k <= etapa || k === 1 ? detalle[k] : 'Pendiente'}</div>
-          </div>))}
+        <div className="ruta">{ETAPAS.map((t, k) => {
+          const doc = [m.escaneo, perfil?.rol === 'cliente' ? null : nacion?.escaneo, cert?.archivo, null][k]
+          return (
+            <div key={t} className={`estacion ${k <= etapa ? 'hecha' : ''} ${k === etapa ? 'actual' : ''}`} style={colorEtapa(Math.min(k <= etapa ? etapa : k, 3))}>
+              <span className="punto" />
+              <div className="t">{t}</div>
+              <div className="m">{k <= etapa || k === 1 ? detalle[k] : 'Pendiente'}</div>
+              {k <= etapa && doc && <button className="doc-link" onClick={() => abrirArchivo(doc, setError)}>Ver documento</button>}
+            </div>)
+        })}
         </div></div>}
 
       {!m.anulado && <Documentos m={m} cliente={perfil?.rol === 'cliente'} abrir={(r) => abrirArchivo(r, setError)} />}
@@ -85,7 +91,7 @@ export default function ManifiestoDetalle() {
                 <td><b>{i.corrientes?.codigo}</b><div className="muted small">{i.corrientes?.descripcion}</div></td>
                 <td>{i.contenedor ?? '—'}</td>
                 <td className="n">{num(i.cantidad)} {umL(i.um)}</td>
-                <td><PillEtapa etapa={etapaDe(i.estado)} /></td>
+                <td><PillEtapa etapa={i.estado === 'disposicion_final' && i.certificados?.enviado_cliente ? 3 : etapaDe(i.estado)} /></td>
                 <td className="nw">{i.manifiestos_nacion ? (perfil?.rol === 'cliente' ? fnum(i.manifiestos_nacion.numero) : <Link to={`/nacion/${i.manifiestos_nacion.id}`}>{fnum(i.manifiestos_nacion.numero)}</Link>) : '—'}</td>
                 <td className="nw">{i.certificados
                   ? <button className="link" onClick={() => abrirArchivo(i.certificados!.archivo, setError)}>{i.certificados.numero}</button> : '—'}</td>
@@ -222,7 +228,7 @@ function Historial({ m }: { m: Manifiesto }) {
 
   return (
     <div className="card mt">
-      <h2>Historial</h2>
+      <h2>Historial de cambios</h2>
       <div className="historial">{filas.map((f, k) => (
         <div key={k} className="he">
           <span className="muted small nw">{cuando(f.fecha)}</span>

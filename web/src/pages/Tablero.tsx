@@ -3,23 +3,23 @@ import { ETAPAS } from '../lib/formato'
 import { colorEtapa } from '../components/Etapa'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { etapaManifiesto, fd, fnum, hoy, num, umL } from '../lib/formato'
+import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { Alerta, Manifiesto } from '../lib/tipos'
-import { PillEtapa } from '../components/Etapa'
+import { MiniEtapa, PillEtapa } from '../components/Etapa'
 
 interface Resumen {
-  etapas: [number, number, number]
+  etapas: [number, number, number, number]
+  kgs: number
+  generadores: number
   meses: { mes: string; kgs: number; lts: number }[]
   regularizar: { id: number; nombre: string; documento: string; vto: string | null; estado: 'vencido' | 'por_vencer' | 'sin_cargar' }[]
   regularizar_total: { vencido: number; por_vencer: number; sin_cargar: number }
 }
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
-const cuenta = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0
 
 export default function Tablero() {
   const nav = useNavigate()
-  const [k, setK] = useState({ mes: 0, planta: 0, fueraPlazo: 0, transito: 0, flota: 0 })
   const [ultimos, setUltimos] = useState<Manifiesto[]>([])
   const [alertas, setAlertas] = useState<Alerta[]>([])
   const [desde, setDesde] = useState(() => `${hoy().slice(0, 4)}-01-01`)
@@ -32,17 +32,8 @@ export default function Tablero() {
   }, [desde, hasta])
 
   useEffect(() => {
-    const mes = hoy().slice(0, 8) + '01'
-    Promise.all([
-      cuenta(supabase.from('manifiestos').select('id', { count: 'exact', head: true }).gte('fecha', mes).eq('anulado', false)),
-      cuenta(supabase.from('residuos_en_planta').select('id', { count: 'exact', head: true })),
-      cuenta(supabase.from('residuos_en_planta').select('id', { count: 'exact', head: true }).lt('dias_restantes', 0)),
-      cuenta(supabase.from('manifiesto_items').select('id', { count: 'exact', head: true }).eq('estado', 'en_transito')),
-      cuenta(supabase.from('alertas_vencimiento').select('id', { count: 'exact', head: true }).in('tipo', ['camion', 'chofer']).eq('estado', 'vencido')),
-    ]).then(([mes, planta, fueraPlazo, transito, flota]) => setK({ mes, planta, fueraPlazo, transito, flota }))
-
     supabase.from('manifiestos')
-      .select('id, numero, fecha, tipo, anulado, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))')
+      .select('id, numero, fecha, tipo, anulado, etapa, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))')
       .eq('anulado', false).order('fecha', { ascending: false }).order('numero', { ascending: false }).limit(8)
       .then(({ data }) => setUltimos((data ?? []) as unknown as Manifiesto[]))
 
@@ -53,16 +44,17 @@ export default function Tablero() {
     ]).then(([a, b]) => setAlertas([...(a.data ?? []), ...(b.data ?? [])].slice(0, 8) as Alerta[]))
   }, [])
 
+  const sinDisposicion = res ? res.etapas[0] + res.etapas[1] : 0
+  const anio = desde.slice(0, 4) === hasta.slice(0, 4) && desde.endsWith('-01-01') ? `en ${desde.slice(0, 4)}` : `del ${fd(desde)} al ${fd(hasta)}`
   return (
     <>
       <h1>Tablero</h1>
-      <p className="sub">Situación al {fd(hoy())}.</p>
+      <p className="sub">Situación al {fd(hoy())}. Manifiestos emitidos {anio}.</p>
       <div className="grid k4">
-        <div className="card kpi"><div className="v">{num(k.mes)}</div><div className="l">manifiestos emitidos este mes</div></div>
-        <div className={`card kpi ${k.fueraPlazo ? 'alerta' : ''}`}><div className="v">{num(k.planta)}</div>
-          <div className="l">residuos en planta{k.fueraPlazo ? `, ${num(k.fueraPlazo)} fuera de plazo` : ''}</div></div>
-        <div className="card kpi"><div className="v">{num(k.transito)}</div><div className="l">residuos en tránsito a disposición final</div></div>
-        <Link to="/vencimientos" className={`card kpi ${k.flota ? 'alerta' : ''}`}><div className="v">{num(k.flota)}</div><div className="l">habilitaciones vencidas de camiones y choferes</div></Link>
+        <Link to={`/manifiestos?desde=${desde}&hasta=${hasta}`} className="card kpi"><div className="v">{res ? num(res.etapas.reduce((a, b) => a + b, 0)) : '…'}</div><div className="l">manifiestos {anio}</div></Link>
+        <div className="card kpi"><div className="v">{res ? `${num(Math.round(res.kgs / 1000))} t` : '…'}</div><div className="l">de residuos sólidos y semisólidos</div></div>
+        <div className="card kpi"><div className="v">{res ? num(res.generadores) : '…'}</div><div className="l">generadores atendidos</div></div>
+        <Link to={`/manifiestos?etapa=0&desde=${desde}&hasta=${hasta}`} className={`card kpi ${sinDisposicion ? 'alerta' : ''}`}><div className="v">{num(sinDisposicion)}</div><div className="l">manifiestos sin disposición final</div></Link>
       </div>
 
       <div className="card mt" data-ayuda="tab-etapas">
@@ -82,53 +74,51 @@ export default function Tablero() {
           {res && <Volumen meses={res.meses} />}
         </div>
         <div className="card">
-          <div className="bar" style={{ justifyContent: 'space-between', margin: '0 0 6px' }}>
-            <h2 style={{ margin: 0 }}>Generadores a regularizar</h2>
-          </div>
-          {res && <>
-            <p className="muted small" style={{ marginTop: 0 }}>Con retiros en el último año: {num(res.regularizar_total.vencido)} con habilitación vencida, {num(res.regularizar_total.por_vencer)} por vencer y {num(res.regularizar_total.sin_cargar)} sin cargar.</p>
-            {res.regularizar.length === 0 ? <p className="muted">Todos al día.</p> :
-              <div className="stack" style={{ gap: 8 }}>{res.regularizar.slice(0, 5).map((g) => (
-                <Link key={`${g.id}${g.documento}`} to={`/altas/generadores/${g.id}`} className="fila-link">
-                  <span><b>{g.nombre}</b><span className="muted small" style={{ display: 'block' }}>{g.documento}</span></span>
-                  <span className={`pill ${g.estado === 'por_vencer' ? 'haz' : 'bad'}`}>{g.estado === 'sin_cargar' ? 'Sin cargar' : `${g.estado === 'vencido' ? 'Venció' : 'Vence'} ${fd(g.vto)}`}</span>
-                </Link>))}
-                <Link to="/vencimientos?tipo=generador" className="small">Ver todos</Link>
-              </div>}
+          <h2>Habilitaciones a revisar</h2>
+          {alertas.length === 0 ? <p className="muted">No hay vencimientos en los próximos días.</p> : <>
+            <div className="lista-it">{alertas.slice(0, 6).map((a) => (
+              <Link key={`${a.tipo}${a.id}${a.documento}`} to={`/altas/${a.tipo === 'camion' ? 'camiones' : 'choferes'}/${a.id}`} className="it">
+                <div><b>{a.nombre}</b><div className="small muted">{a.tipo === 'camion' ? 'Camión' : 'Chofer'} · {a.documento}</div></div>
+                <span className={`pill ${a.estado === 'vencido' ? 'bad' : 'haz'}`}>{a.estado === 'vencido' ? 'Vencido' : 'Vence'} {fd(a.vto)}</span>
+              </Link>))}
+            </div>
+            <p className="small" style={{ margin: '10px 0 0' }}><Link to="/vencimientos">Ver flota y choferes</Link></p>
           </>}
         </div>
       </div>
 
-      <div className="grid c21 mt">
-        <div className="card">
-          <div className="bar" style={{ justifyContent: 'space-between' }}>
-            <h2 style={{ margin: 0 }}>Últimos manifiestos</h2>
-            <Link to="/manifiestos/nuevo" data-ayuda="man-nuevo"><button className="pri">Nuevo manifiesto</button></Link>
+      {res && res.regularizar.length > 0 && (
+        <div className="card mt">
+          <div className="bar" style={{ justifyContent: 'space-between', margin: '0 0 6px' }}>
+            <h2 style={{ margin: 0 }}>Generadores a regularizar</h2>
+            <span className="muted small">{num(res.regularizar_total.vencido)} con habilitación vencida · {num(res.regularizar_total.por_vencer)} por vencer · {num(res.regularizar_total.sin_cargar)} sin cargar</span>
           </div>
-          <div className="tw"><table>
-            <thead><tr><th>Manifiesto</th><th>Fecha</th><th>Generador</th><th>Residuos</th><th>Etapa</th></tr></thead>
-            <tbody>{ultimos.map((m) => {
-              const it = m.manifiesto_items ?? []
-              return (
-                <tr key={m.id} className="fila" tabIndex={0} onClick={() => nav(`/manifiestos/${m.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/manifiestos/${m.id}`)}>
-                  <td className="nw"><b>{fnum(m.numero)}</b></td><td>{fd(m.fecha)}</td><td>{m.generadores?.nombre}</td>
-                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ marginRight: 4 }}>{i.corrientes?.codigo} · {num(i.cantidad)} {umL(i.um)}</span>)}</td>
-                  <td><PillEtapa etapa={etapaManifiesto(it.map((i) => i.estado))} /></td>
-                </tr>)
-            })}</tbody>
-          </table></div>
+          <div className="gr-lista">{res.regularizar.slice(0, 8).map((g) => (
+            <Link key={`${g.id}${g.documento}`} to={`/altas/generadores/${g.id}`} className="gr-it">
+              <b>{g.nombre}</b>
+              <span className={`pill ${g.estado === 'por_vencer' ? 'haz' : 'bad'}`}>{g.estado === 'sin_cargar' ? 'Sin cargar' : `${g.estado === 'vencido' ? 'Vencido' : 'Vence'} ${fd(g.vto)}`}</span>
+            </Link>))}
+          </div>
+        </div>)}
+
+      <div className="card mt">
+        <div className="bar" style={{ justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0 }}>Últimos manifiestos</h2>
+          <Link to="/manifiestos/nuevo" data-ayuda="man-nuevo"><button className="pri">Nuevo manifiesto</button></Link>
         </div>
-        <div className="card">
-          <h2>Vencimientos de flota</h2>
-          {alertas.length === 0 ? <p className="muted">No hay vencimientos en los próximos días.</p> :
-            <div className="stack" style={{ gap: 8 }}>{alertas.map((a) => (
-              <div key={`${a.tipo}${a.id}${a.documento}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span><b>{a.nombre}</b> <span className="muted small">{a.documento}</span></span>
-                <span className={`pill ${a.estado === 'vencido' ? 'bad' : 'haz'}`} style={{ flexShrink: 0, alignSelf: 'flex-start' }}>{a.estado === 'vencido' ? 'Venció' : 'Vence'} {fd(a.vto)}</span>
-              </div>))}
-              <Link to="/vencimientos" className="small">Ver todos los vencimientos</Link>
-            </div>}
-        </div>
+        <div className="tw"><table>
+          <thead><tr><th>Manifiesto</th><th>Fecha</th><th>Generador</th><th>Corrientes</th><th>Cantidad</th><th>Etapa</th></tr></thead>
+          <tbody>{ultimos.map((m) => {
+            const it = m.manifiesto_items ?? []
+            return (
+              <tr key={m.id} className="fila" tabIndex={0} onClick={() => nav(`/manifiestos/${m.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/manifiestos/${m.id}`)}>
+                <td className="nw"><b>{fnum(m.numero)}</b></td><td className="nw">{fd(m.fecha)}</td><td>{m.generadores?.nombre}</td>
+                <td>{it.map((i, n) => <span key={n} className="pill" style={{ marginRight: 4 }}>{i.corrientes?.codigo}</span>)}</td>
+                <td className="nw">{it.map((i) => `${num(i.cantidad)} ${umL(i.um)}`).join(' + ')}</td>
+                <td><span className="etapa-celda"><MiniEtapa etapa={m.etapa ?? 0} /><PillEtapa etapa={m.etapa ?? 0} /></span></td>
+              </tr>)
+          })}</tbody>
+        </table></div>
       </div>
     </>
   )

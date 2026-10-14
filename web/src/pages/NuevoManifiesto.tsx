@@ -143,7 +143,7 @@ export default function NuevoManifiesto() {
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 14 }}>{error}</div>}
 
       <div className="card stack" data-ayuda="nm-formulario">
-        <h2 style={{ margin: 0 }}>Formulario y retiro</h2>
+        <h2 className="paso-h"><span className="sn">1</span>Formulario y retiro</h2>
         <div className="campos">
           <label className="campo">Transportista
             <select value={transportista} onChange={(e) => setTransportista(e.target.value)} required>
@@ -179,7 +179,7 @@ export default function NuevoManifiesto() {
       </div>
 
       <div className="card stack mt" data-ayuda="nm-flota">
-        <h2 style={{ margin: 0 }}>Camión y chofer</h2>
+        <h2 className="paso-h"><span className="sn">2</span>Camión y chofer</h2>
         <div className="campos">
           <label className="campo">Camión
             <select value={camion} onChange={(e) => setCamion(e.target.value)} required={esAzul}>
@@ -208,7 +208,7 @@ export default function NuevoManifiesto() {
       </div>
 
       {esAzul && <div className="card stack mt" data-ayuda="nm-instrucciones">
-        <h2 style={{ margin: 0 }}>Instrucciones de manipulación</h2>
+        <h2 className="paso-h"><span className="sn">3</span>Instrucciones de manipulación</h2>
         <div className="campos">{(['inhalacion', 'dermica', 'oral'] as const).map((k) => (
           <label key={k} className="campo">Toxicidad {k === 'inhalacion' ? 'por inhalación' : k === 'dermica' ? 'dérmica' : 'oral'}
             <select value={instr[k]} onChange={(e) => setInstr({ ...instr, [k]: e.target.value })}>{NIVELES.map((n) => <option key={n}>{n}</option>)}</select>
@@ -228,7 +228,7 @@ export default function NuevoManifiesto() {
       </div>}
 
       <div className="card stack mt" data-ayuda="nm-residuos">
-        <h2 style={{ margin: 0 }}>Residuos</h2>
+        <h2 className="paso-h"><span className="sn">{esAzul ? 4 : 3}</span>Residuos</h2>
         {renglones.map((r, k) => (
           <div key={k} className="campos" style={{ alignItems: 'end' }}>
             <label className="campo">Corriente

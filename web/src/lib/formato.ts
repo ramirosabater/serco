@@ -10,7 +10,7 @@ export const num = (n: number) => nf.format(n)
 export const umL = (u: UM) => ({ KGS: 'kg', LTS: 'l', MS3: 'm³' })[u]
 export const hoy = () => new Date().toISOString().slice(0, 10)
 
-export const ETAPAS = ['Almacenado', 'En tránsito', 'Dispuesto', 'Certificado'] as const
+export const ETAPAS = ['Almacenado', 'En tránsito', 'Dispuesto', 'Certificado entregado'] as const
 export const etapaDe = (e: EstadoResiduo) => (e === 'almacenado' ? 0 : e === 'en_transito' ? 1 : 2)
 /** La etapa de un manifiesto es la del residuo más atrasado */
 export const etapaManifiesto = (estados: EstadoResiduo[]) => (estados.length ? Math.min(...estados.map(etapaDe)) : 0)

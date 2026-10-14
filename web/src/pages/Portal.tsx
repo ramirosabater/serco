@@ -4,7 +4,7 @@ import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
 import { ETAPAS, etapaManifiesto, fd, fnum, num, umL } from '../lib/formato'
 import type { Manifiesto } from '../lib/tipos'
-import { colorEtapa, PillEtapa } from '../components/Etapa'
+import { colorEtapa, MiniEtapa, PillEtapa } from '../components/Etapa'
 
 /** Portal del cliente: ve solo los retiros y certificados de sus generadores (lo garantizan los permisos de la base) */
 export function MenuPortal() {
@@ -69,7 +69,7 @@ export function PortalRetiros() {
     if (interno && !g) return
     setCargando(true); setEtapa(null)
     let c = supabase.from('manifiestos')
-      .select('id, numero, fecha, tipo, anulado, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))')
+      .select('id, numero, fecha, tipo, anulado, etapa, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))')
       .eq('anulado', false).gte('fecha', `${anio}-01-01`).lte('fecha', `${anio}-12-31`)
     if (g) c = c.eq('generador_id', g)
     c.order('fecha', { ascending: false }).limit(1000)
@@ -77,8 +77,9 @@ export function PortalRetiros() {
   }, [anio, interno, g])
 
   const anios = Array.from({ length: new Date().getFullYear() - 2009 }, (_, i) => String(new Date().getFullYear() - i))
-  const varios = new Set(lista.map((m) => m.generadores?.nombre)).size > 1
-  const etapas = lista.map((m) => etapaManifiesto((m.manifiesto_items ?? []).map((i) => i.estado)))
+  const nombres = [...new Set(lista.map((m) => m.generadores?.nombre).filter(Boolean))] as string[]
+  const varios = nombres.length > 1
+  const etapas = lista.map((m) => m.etapa ?? etapaManifiesto((m.manifiesto_items ?? []).map((i) => i.estado)))
   const visibles = etapa === null ? lista : lista.filter((_, k) => etapas[k] === etapa)
   const items = lista.flatMap((m) => m.manifiesto_items ?? [])
   const suma = (u: string) => items.filter((i) => i.um === u).reduce((a, i) => a + i.cantidad, 0)
@@ -86,9 +87,9 @@ export function PortalRetiros() {
 
   return (
     <>
-      <h1>Mis retiros</h1>
-      <p className="sub">Cada retiro con su recorrido: almacenado en planta, en viaje a disposición final y certificado.</p>
       <VerComo />
+      <h1>{nombres.length === 1 ? nombres[0] : 'Mis retiros'}</h1>
+      <p className="sub">Sus residuos retirados por Serco Ambiental en {anio}, con el recorrido de cada uno hasta el certificado.</p>
       <MenuPortal />
       <div className="bar"><label className="small">Año <select value={anio} onChange={(e) => setAnio(e.target.value)}>{anios.map((a) => <option key={a}>{a}</option>)}</select></label></div>
       {!cargando && lista.length > 0 && <>
@@ -99,9 +100,9 @@ export function PortalRetiros() {
             : <div className="card kpi"><div className="v">{new Set(items.map((i) => i.corrientes?.codigo)).size}</div><div className="l">tipos de residuo</div></div>}
           <div className="card kpi"><div className="v">{ultimo ? fd(ultimo).slice(0, 5) : '—'}</div><div className="l">último retiro</div></div>
         </div>
-        <div className="grid k3 mt etapas-portal">{[0, 1, 2].map((k) => (
+        <div className="grid k4 mt etapas-portal">{[0, 1, 2, 3].map((k) => (
           <button key={k} className={`card kpi ${etapa === k ? 'sel' : ''}`} style={colorEtapa(k)} aria-pressed={etapa === k} onClick={() => setEtapa(etapa === k ? null : k)}>
-            <div className="v">{num(etapas.filter((e) => e === k).length)}</div><div className="l">{ETAPAS[k]}{k === 2 ? ' y certificado' : ''}</div>
+            <div className="v">{num(etapas.filter((e) => e === k).length)}</div><div className="l">{ETAPAS[k]}</div>
           </button>))}
         </div>
       </>}
@@ -113,14 +114,15 @@ export function PortalRetiros() {
         {error && <div className="aviso bad">{error}</div>}
         {cargando ? <p className="cargando">Cargando…</p> : lista.length === 0 ? <p className="vacio">No hay retiros en {anio}.</p> : (
           <div className="tw"><table>
-            <thead><tr><th>Manifiesto</th><th>Fecha</th>{varios && <th>Empresa</th>}<th>Residuos</th><th>Etapa</th></tr></thead>
+            <thead><tr><th>Manifiesto</th><th>Fecha</th>{varios && <th>Empresa</th>}<th>Corrientes</th><th>Cantidad</th><th>Etapa</th></tr></thead>
             <tbody>{visibles.map((m) => {
               const it = m.manifiesto_items ?? []
               return (
                 <tr key={m.id} className="fila" tabIndex={0} onClick={() => nav(`/manifiestos/${m.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/manifiestos/${m.id}`)}>
                   <td className="nw"><b>{fnum(m.numero)}</b></td><td className="nw">{fd(m.fecha)}</td>{varios && <td>{m.generadores?.nombre}</td>}
-                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo} · {num(i.cantidad)} {umL(i.um)}</span>)}</td>
-                  <td><PillEtapa etapa={etapaManifiesto(it.map((i) => i.estado))} /></td>
+                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo}</span>)}</td>
+                  <td className="nw">{it.map((i) => `${num(i.cantidad)} ${umL(i.um)}`).join(' + ')}</td>
+                  <td><span className="etapa-celda"><MiniEtapa etapa={m.etapa ?? 0} /><PillEtapa etapa={m.etapa ?? 0} /></span></td>
                 </tr>)
             })}</tbody>
           </table></div>)}
@@ -157,9 +159,9 @@ export function PortalCertificados() {
 
   return (
     <>
+      <VerComo />
       <h1>Certificados de disposición final</h1>
       <p className="sub">Descargá el certificado de cada residuo tratado. Cuando hay uno nuevo, te avisamos por mail.</p>
-      <VerComo />
       <MenuPortal />
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
       <div className="card">

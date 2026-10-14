@@ -69,10 +69,12 @@ function PorProducto() {
   const periodos = [...new Set(enUm.map((f) => f.periodo))].sort()
   const corrientes = [...new Set(enUm.map((f) => f.corriente))].sort()
   const valor = (c: string, p: string) => enUm.find((f) => f.corriente === c && f.periodo === p)?.cantidad ?? 0
-  const etiqueta = (p: string) => agrupar === 'mes' ? `${p.slice(5, 7)}/${p.slice(0, 4)}`
-    : agrupar === 'quincena' ? `${p.slice(8, 10) === '01' ? '1ª' : '2ª'} ${p.slice(5, 7)}/${p.slice(2, 4)}` : `Sem. ${fd(p).slice(0, 5)}`
+  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  const etiqueta = (p: string) => agrupar === 'mes' ? `${MES[+p.slice(5, 7) - 1]} ${p.slice(2, 4)}`
+    : agrupar === 'quincena' ? `${p.slice(8, 10) === '01' ? '1ª' : '2ª'} ${MES[+p.slice(5, 7) - 1]}` : `Sem. ${fd(p).slice(0, 5)}`
   const totalC = (c: string) => periodos.reduce((a, p) => a + valor(c, p), 0)
   const totalP = (p: string) => corrientes.reduce((a, c) => a + valor(c, p), 0)
+  const maxP = Math.max(1, ...periodos.map(totalP))
 
   function excel() {
     exportarExcel<string>(`Cantidad por producto ${d} a ${h}`, [
@@ -86,7 +88,8 @@ function PorProducto() {
   return (
     <>
       <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} onExcel={excel} extra={<>
-        <select value={agrupar} onChange={(e) => setAgrupar(e.target.value as typeof agrupar)} aria-label="Agrupar"><option value="semana">Por semana</option><option value="quincena">Por quincena</option><option value="mes">Por mes</option></select>
+        <span className="pestanas" role="group" aria-label="Agrupar">{([['semana', 'Semanal'], ['quincena', 'Quincenal'], ['mes', 'Mensual']] as const).map(([v, l]) => (
+          <button key={v} type="button" className={agrupar === v ? 'on' : ''} aria-pressed={agrupar === v} onClick={() => setAgrupar(v)}>{l}</button>))}</span>
         <select value={um} onChange={(e) => setUm(e.target.value as UM)} aria-label="Unidad"><option value="KGS">Kilos</option><option value="LTS">Litros</option><option value="MS3">m³</option></select>
         <select value={planta} onChange={(e) => setPlanta(e.target.value)} aria-label="Planta"><option value="">Todas las plantas</option>{plantas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
         <select value={transp} onChange={(e) => setTransp(e.target.value)} aria-label="Transportista"><option value="">Todos los transportistas</option>{transportistas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
@@ -95,11 +98,15 @@ function PorProducto() {
       <div className="card libro">
         <h2 className="solo-imprimir">Cantidad transportada por producto ({umL(um)}) · {fd(d)} al {fd(h)}</h2>
         {corrientes.length === 0 ? <p className="vacio">No hay movimientos en {umL(um)} en el período.</p> : (
-          <div className="tw"><table className="compacta">
-            <thead><tr><th>Corriente</th>{periodos.map((p) => <th key={p} style={{ textAlign: 'right' }}>{etiqueta(p)}</th>)}<th style={{ textAlign: 'right' }}>Total</th></tr></thead>
-            <tbody>{corrientes.map((c) => (
-              <tr key={c}><td><b>{c}</b></td>{periodos.map((p) => <td key={p} className="n">{valor(c, p) ? num(Math.round(valor(c, p))) : ''}</td>)}<td className="n"><b>{num(Math.round(totalC(c)))}</b></td></tr>))}
-              <tr><td><b>Total</b></td>{periodos.map((p) => <td key={p} className="n"><b>{num(Math.round(totalP(p)))}</b></td>)}<td className="n"><b>{num(Math.round(periodos.reduce((a, p) => a + totalP(p), 0)))}</b></td></tr>
+          <div className="tw"><table className="compacta piv">
+            <thead><tr><th>Corriente</th>{periodos.map((p) => (
+              <th key={p} style={{ textAlign: 'right' }}><div className="pbar no-imprimir"><i style={{ height: Math.max(2, (totalP(p) / maxP) * 36) }} title={`${num(Math.round(totalP(p)))} ${umL(um)}`} /></div>{etiqueta(p)}</th>))}
+              <th style={{ textAlign: 'right' }}>Total {umL(um)}</th></tr></thead>
+            <tbody>{[...corrientes].sort((a, b) => totalC(b) - totalC(a)).map((c) => (
+              <tr key={c}><td><b>{c}</b><div className="muted small">{(enUm.find((f) => f.corriente === c)?.descripcion ?? '').slice(0, 40)}</div></td>
+                {periodos.map((p) => <td key={p} className="n">{valor(c, p) ? num(Math.round(valor(c, p))) : <span className="muted">·</span>}</td>)}
+                <td className="n"><b>{num(Math.round(totalC(c)))}</b></td></tr>))}
+              <tr className="tot"><td><b>Total</b></td>{periodos.map((p) => <td key={p} className="n"><b>{num(Math.round(totalP(p)))}</b></td>)}<td className="n"><b>{num(Math.round(periodos.reduce((a, p) => a + totalP(p), 0)))}</b></td></tr>
             </tbody>
           </table></div>)}
         <p className="small muted no-imprimir" style={{ marginBottom: 0 }}>Por fecha de retiro. Cuando Serco pase su planilla actual, se ajustan las columnas para que salga igual.</p>
@@ -242,7 +249,7 @@ function Ranking({ titulo, l }: { titulo: string; l: Rank[] }) {
           <div key={x.nombre + x.um} className="rk" title={`${x.nombre}: ${num(Math.round(x.total))} ${umL(x.um)}`}>
             <span className="rk-n">{x.nombre}</span>
             <span className="rk-b"><i style={{ width: `${Math.max(2, (x.total / max) * 100)}%` }} /></span>
-            <span className="rk-v">{num(Math.round(x.total))} {umL(x.um)}</span>
+            <span className="rk-v">{x.um === 'KGS' ? `${num(Math.round(x.total / 1000))} t` : `${num(Math.round(x.total))} ${umL(x.um)}`}</span>
           </div>))}
         </div>)}
     </div>
@@ -258,7 +265,8 @@ function EstadoFisico({ l }: { l: Rank[] }) {
     <div className="card mt">
       <h2>Sólidos, líquidos y barros</h2>
       {unidades.map((u) => {
-        const filas = l.filter((x) => x.um === u)
+        const ORDEN = ['SÓLIDO', 'LÍQUIDO', 'SEMISÓLIDO']
+        const filas = l.filter((x) => x.um === u).sort((a, b) => (ORDEN.indexOf(a.nombre) + 9) % 9 - (ORDEN.indexOf(b.nombre) + 9) % 9)
         const tot = filas.reduce((a, x) => a + x.total, 0) || 1
         return (
           <div key={u} style={{ marginBottom: 10 }}>
@@ -324,7 +332,7 @@ export default function Reportes() {
   return (
     <>
       <div className="no-imprimir">
-        <h1>Reportes</h1>
+        <h1>{REPORTES[t][0]}</h1>
         <p className="sub">{REPORTES[t][1]}</p>
         <nav className="bar" aria-label="Reportes" style={{ marginBottom: 18 }} data-ayuda="rep-tipos">
           {Object.entries(REPORTES).map(([k, [n]]) => <NavLink key={k} to={`/reportes/${k}`} className={`subnav ${k === t ? 'active' : ''}`}>{n}</NavLink>)}

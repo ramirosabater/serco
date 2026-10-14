@@ -33,6 +33,8 @@ export interface Manifiesto {
   escaneo: string | null
   validacion_omitida?: string | null
   instrucciones?: Instrucciones | null
+  /** Etapa calculada en la base: 0 almacenado, 1 en tránsito, 2 dispuesto, 3 certificado entregado */
+  etapa?: number
   creado?: string
   generadores?: { id: number; nombre: string; cuit: string | null } | null
   generadores_principales?: { nombre: string } | null

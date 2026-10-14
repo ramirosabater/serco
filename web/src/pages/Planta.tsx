@@ -61,6 +61,7 @@ function ArmarCarga() {
   const [enviando, setEnviando] = useState(false)
   const [modo, setModo] = useState<'plan' | 'mano'>('plan')
   const [omitir, setOmitir] = useState('')
+  const [modal, setModal] = useState(false)
 
   useEffect(() => {
     supabase.from('generadores_principales').select('id, nombre').eq('activo', true).order('nombre').then(({ data }) => {
@@ -141,10 +142,58 @@ function ArmarCarga() {
     setEnviando(false)
     if (error) { setError(mensajeError(error)); return }
     setOk(`Manifiesto Nación ${fnum(form.numero)} armado con ${elegidos.length} residuos. Quedan en tránsito hasta que llegue el certificado.`)
-    setForm((f) => ({ ...f, numero: '' })); cargar(); void data
+    setForm((f) => ({ ...f, numero: '' })); setModal(false); cargar(); void data
   }
 
   const fueraPlazo = filas.filter((f) => f.dias_restantes < 0).length
+
+  const formulario = (
+    <form className="card stack" data-ayuda="pl-nacion" onSubmit={armar} style={modo === 'mano' ? { alignSelf: 'start', position: 'sticky', top: 80 } : undefined}>
+      <div className="bar" style={{ justifyContent: 'space-between', margin: 0 }}>
+        <h2 style={{ margin: 0 }}>Manifiesto Nación</h2>
+        {modo === 'plan' && <button type="button" className="link" onClick={() => setModal(false)}>Cerrar</button>}
+      </div>
+      {!elegidos.length && <p className="muted small" style={{ margin: 0 }}>Tocá "Armar este viaje" en uno de los viajes sugeridos, o elegí los residuos a mano.</p>}
+      <div>
+        <b>{elegidos.length} residuos</b> · {totales(elegidos).map(([u, v]) => `${num(v)} ${umL(u)}`).join(' + ') || 'nada elegido'}
+        {elegidos.length > 0 && <div className="muted small">{corrientesSel.length} corrientes</div>}
+      </div>
+      {grupos.length > 1 && <div className="aviso bad">Hay residuos de grupos que no pueden viajar juntos: {grupos.join(', ')}.</div>}
+      {excede && <div className="aviso haz">Se pasa de la capacidad del camión ({num(camion!.capacidad!)} kg).</div>}
+      <label className="campo">Número del Manifiesto Nación
+        <input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required inputMode="numeric" placeholder="Del formulario verde" />
+      </label>
+      <label className="campo">Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required /></label>
+      <label className="campo">Operador de disposición final
+        <select value={form.operador} onChange={(e) => setForm({ ...form, operador: e.target.value })} required>
+          <option value="">Elegí el operador</option>
+          {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}{elegidos.length && !opApto(o.id) ? ' · no habilitado para todo' : ''}</option>)}
+        </select>
+      </label>
+      {noHabilitadas.length > 0 && <div className="aviso bad">El operador no está habilitado para: {noHabilitadas.join(', ')}.</div>}
+      <label className="campo">Transportista
+        <select value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value, camion: '', chofer: '' })} required>
+          {transportistas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+        </select>
+      </label>
+      <label className="campo">Camión
+        <select value={form.camion} onChange={(e) => setForm({ ...form, camion: e.target.value })} required>
+          <option value="">Elegí el camión</option>
+          {camiones.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.capacidad ? ` · ${num(c.capacidad)} ${c.capacidad_um === 'LTS' ? 'l' : 'kg'}` : ''}</option>)}
+        </select>
+      </label>
+      <label className="campo">Chofer
+        <select value={form.chofer} onChange={(e) => setForm({ ...form, chofer: e.target.value })} required>
+          <option value="">Elegí el chofer</option>
+          {choferes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </label>
+      {puedeEditar
+        ? <button className="pri" data-ayuda="pl-armar" disabled={enviando || !elegidos.length || grupos.length > 1}>{enviando ? 'Armando…' : 'Armar Manifiesto Nación'}</button>
+        : <p className="muted small">Tu usuario es de consulta.</p>}
+      <p className="muted small" style={{ margin: 0 }}>Al armarlo se controlan los vencimientos del camión y el chofer y las corrientes del operador.</p>
+    </form>
+  )
 
   return (
     <>
@@ -155,70 +204,35 @@ function ArmarCarga() {
       </div>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
       {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok} <Link to="/planta?v=transito">Ver en tránsito</Link></div>}
-      <div className="grid c21">
-        <div>
-          <nav className="bar" aria-label="Cómo armar la carga" style={{ marginBottom: 10 }}>
-            <a href="#" className={`subnav ${modo === 'plan' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setModo('plan') }} data-ayuda="pl-tab-plan">Viajes sugeridos</a>
-            <a href="#" className={`subnav ${modo === 'mano' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setModo('mano') }}>Elegir a mano</a>
-          </nav>
-          {cargando ? <div className="card"><p className="cargando">Cargando…</p></div> : modo === 'plan'
-            ? <div data-ayuda="pl-plan"><PlanViajes filas={filas} operadores={operadores} habilitadas={habilitadas} puedeEditar={puedeEditar}
-                onUsar={(ids, op) => { setOk(''); setSel(new Set(ids)); setForm((f) => ({ ...f, operador: op })); document.querySelector('[data-ayuda="pl-nacion"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} /></div>
-            : <ElegirAMano filas={filas.filter((f) => !omitir || f.generador !== omitir)} sel={sel} alternar={alternar}
-                elegirTodos={(ids) => { setOk(''); setSel((s) => new Set([...s, ...ids])) }}
-                herramientas={<>
-                  <label className="small">Omitir generador <select value={omitir} onChange={(e) => setOmitir(e.target.value)}>
-                    <option value="">Ninguno</option>
-                    {[...new Set(filas.map((f) => f.generador))].sort().map((g) => <option key={g}>{g}</option>)}
-                  </select></label>
-                  <button type="button" data-ayuda="pl-sugerir" onClick={sugerir} disabled={!filas.length} title="Elegí antes el operador y el camión para que la sugerencia respete sus corrientes y su capacidad">Sugerir carga</button>
-                  {sel.size > 0 && <button type="button" onClick={() => setSel(new Set())}>Limpiar</button>}
-                </>} />}
-        </div>
-
-        <form className="card stack" data-ayuda="pl-nacion" onSubmit={armar} style={{ alignSelf: 'start', position: 'sticky', top: 80 }}>
-          <h2 style={{ margin: 0 }}>Manifiesto Nación</h2>
-          {!elegidos.length && <p className="muted small" style={{ margin: 0 }}>Tocá "Armar este viaje" en uno de los viajes sugeridos, o elegí los residuos a mano.</p>}
-          <div>
-            <b>{elegidos.length} residuos</b> · {totales(elegidos).map(([u, v]) => `${num(v)} ${umL(u)}`).join(' + ') || 'nada elegido'}
-            {elegidos.length > 0 && <div className="muted small">{corrientesSel.length} corrientes</div>}
+      <nav className="bar" aria-label="Cómo armar la carga">
+        <span className="pestanas">
+          <button type="button" className={modo === 'plan' ? 'on' : ''} onClick={() => setModo('plan')} data-ayuda="pl-tab-plan">Cargas sugeridas</button>
+          <button type="button" className={modo === 'mano' ? 'on' : ''} onClick={() => setModo('mano')}>Selección manual</button>
+        </span>
+      </nav>
+      {cargando ? <div className="card"><p className="cargando">Cargando…</p></div> : modo === 'plan' ? <>
+        <div data-ayuda="pl-plan"><PlanViajes filas={filas} operadores={operadores} habilitadas={habilitadas} puedeEditar={puedeEditar}
+          onUsar={(ids, op) => { setOk(''); setError(''); setSel(new Set(ids)); setForm((f) => ({ ...f, operador: op })); setModal(true) }} /></div>
+        {modal && <div className="modal-fondo" onClick={() => setModal(false)}>
+          <div className="modal" role="dialog" aria-label="Armar Manifiesto Nación" onClick={(e) => e.stopPropagation()}>
+            {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
+            {formulario}
           </div>
-          {grupos.length > 1 && <div className="aviso bad">Hay residuos de grupos que no pueden viajar juntos: {grupos.join(', ')}.</div>}
-          {excede && <div className="aviso haz">Se pasa de la capacidad del camión ({num(camion!.capacidad!)} kg).</div>}
-          <label className="campo">Número del Manifiesto Nación
-            <input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required inputMode="numeric" placeholder="Del formulario verde" />
-          </label>
-          <label className="campo">Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required /></label>
-          <label className="campo">Operador de disposición final
-            <select value={form.operador} onChange={(e) => setForm({ ...form, operador: e.target.value })} required>
-              <option value="">Elegí el operador</option>
-              {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}{elegidos.length && !opApto(o.id) ? ' · no habilitado para todo' : ''}</option>)}
-            </select>
-          </label>
-          {noHabilitadas.length > 0 && <div className="aviso bad">El operador no está habilitado para: {noHabilitadas.join(', ')}.</div>}
-          <label className="campo">Transportista
-            <select value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value, camion: '', chofer: '' })} required>
-              {transportistas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </label>
-          <label className="campo">Camión
-            <select value={form.camion} onChange={(e) => setForm({ ...form, camion: e.target.value })} required>
-              <option value="">Elegí el camión</option>
-              {camiones.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.capacidad ? ` · ${num(c.capacidad)} ${c.capacidad_um === 'LTS' ? 'l' : 'kg'}` : ''}</option>)}
-            </select>
-          </label>
-          <label className="campo">Chofer
-            <select value={form.chofer} onChange={(e) => setForm({ ...form, chofer: e.target.value })} required>
-              <option value="">Elegí el chofer</option>
-              {choferes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </label>
-          {puedeEditar
-            ? <button className="pri" data-ayuda="pl-armar" disabled={enviando || !elegidos.length || grupos.length > 1}>{enviando ? 'Armando…' : 'Armar Manifiesto Nación'}</button>
-            : <p className="muted small">Tu usuario es de consulta.</p>}
-          <p className="muted small" style={{ margin: 0 }}>Al armarlo se controlan los vencimientos del camión y el chofer y las corrientes del operador.</p>
-        </form>
-      </div>
+        </div>}
+      </> : (
+        <div className="grid c21">
+          <ElegirAMano filas={filas.filter((f) => !omitir || f.generador !== omitir)} sel={sel} alternar={alternar}
+            elegirTodos={(ids) => { setOk(''); setSel((s) => new Set([...s, ...ids])) }}
+            herramientas={<>
+              <label className="small">Omitir generador <select value={omitir} onChange={(e) => setOmitir(e.target.value)}>
+                <option value="">Ninguno</option>
+                {[...new Set(filas.map((f) => f.generador))].sort().map((g) => <option key={g}>{g}</option>)}
+              </select></label>
+              <button type="button" data-ayuda="pl-sugerir" onClick={sugerir} disabled={!filas.length} title="Elegí antes el operador y el camión para que la sugerencia respete sus corrientes y su capacidad">Sugerir carga</button>
+              {sel.size > 0 && <button type="button" onClick={() => setSel(new Set())}>Limpiar</button>}
+            </>} />
+          {formulario}
+        </div>)}
     </>
   )
 }

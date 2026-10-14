@@ -22,6 +22,16 @@ const PUEDE: Record<Rol, string> = {
   cliente: 'Entra al portal: ve sus propios retiros, en qué etapa están y descarga sus certificados.',
 }
 
+/** Llama a una función de Supabase y devuelve el mensaje de error legible que manda la función */
+async function invocar(nombre: string, body: Record<string, unknown>): Promise<{ data: unknown; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke(nombre, { body })
+  if (!error) return { data, error: null }
+  let detalle = ''
+  try { detalle = (await (error as { context?: Response }).context?.json())?.error ?? '' } catch { /* sin detalle */ }
+  if (!detalle && /Failed to send|fetch/i.test(error.message)) detalle = 'La función todavía no está publicada en Supabase.'
+  return { data: null, error: detalle || mensajeError(error) }
+}
+
 /** Busca generadores por nombre o CUIT y los agrega a una lista */
 function ElegirGeneradores({ elegidos, setElegidos }: { elegidos: Gen[]; setElegidos: (g: Gen[]) => void }) {
   const [q, setQ] = useState('')
@@ -154,6 +164,14 @@ function Avisos() {
   const [pendientes, setPendientes] = useState({ total: 0, sinMail: 0 })
   const [resultado, setResultado] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [resPrueba, setResPrueba] = useState<{ ok: boolean; t: string } | null>(null)
+
+  async function prueba() {
+    setEnviando(true); setResPrueba(null)
+    const { data, error } = await invocar('avisos', { solo: 'prueba' })
+    setEnviando(false)
+    setResPrueba(error ? { ok: false, t: error } : { ok: true, t: (data as { prueba: string }).prueba + '. Revisá la bandeja (y el correo no deseado).' }); cargar()
+  }
 
   const cargar = () => {
     supabase.from('avisos_log').select('*').order('id', { ascending: false }).limit(15).then(({ data }) => setLog((data ?? []) as Log[]))
@@ -165,9 +183,9 @@ function Avisos() {
 
   async function enviarAhora() {
     setEnviando(true); setResultado('')
-    const { data, error } = await supabase.functions.invoke('avisos', { body: { solo: 'certificados' } })
+    const { data, error } = await invocar('avisos', { solo: 'certificados' })
     setEnviando(false)
-    if (error) { setResultado('No se pudo: ' + mensajeError(error)); return }
+    if (error) { setResultado('No se pudo: ' + error); return }
     const r = data as Record<string, number>
     setResultado(`Avisados ${r.generadores_avisados ?? 0} generadores${r.generadores_sin_mail ? `; ${r.generadores_sin_mail} sin mail cargado` : ''}.`); cargar()
   }
@@ -176,6 +194,10 @@ function Avisos() {
     <div className="card mt">
       <h2>Avisos por mail</h2>
       <p className="muted" style={{ marginTop: 0 }}>Todos los días a las 7: a cada generador, sus certificados nuevos; a Serco, lo que vence dentro de los días configurados abajo, y los lunes el resumen completo.</p>
+      <div className="bar">
+        <button type="button" onClick={prueba} disabled={enviando}>Mandarme un mail de prueba</button>
+        {resPrueba && <span className={`small ${resPrueba.ok ? '' : 'err'}`}>{resPrueba.t}</span>}
+      </div>
       <div className="bar">
         <span>{pendientes.total ? <><b>{pendientes.total}</b> generadores con certificados por avisar{pendientes.sinMail ? <>, <b>{pendientes.sinMail}</b> sin mail cargado</> : ''}</> : 'No hay certificados pendientes de aviso.'}</span>
         <button type="button" onClick={enviarAhora} disabled={enviando || !pendientes.total}>{enviando ? 'Enviando…' : 'Avisar ahora'}</button>

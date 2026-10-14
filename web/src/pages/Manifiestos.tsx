@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import { etapaManifiesto, fd, fnum, num, umL } from '../lib/formato'
 import type { Manifiesto } from '../lib/tipos'
-import { PillEtapa } from '../components/Etapa'
+import { MiniEtapa, PillEtapa } from '../components/Etapa'
 
 const POR_PAGINA = 50
 
@@ -27,7 +27,7 @@ export default function Manifiestos() {
     // Número, código de corriente (Y48, Y9…) o nombre del generador
     const soloNumero = /^[\d\s-]+$/.test(q)
     const corriente = /^y\d/i.test(q)
-    const sel = `id, numero, fecha, tipo, anulado, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
+    const sel = `id, numero, fecha, tipo, anulado, etapa, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
       manifiesto_items(estado, cantidad, um, corrientes(codigo))${corriente ? ', filtro:manifiesto_items!inner(corrientes!inner(codigo))' : ''}`
     let c = supabase.from('manifiestos').select(sel, { count: 'exact' })
     if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`)
@@ -61,6 +61,7 @@ export default function Manifiestos() {
           <option value="0">Almacenado</option>
           <option value="1">En tránsito</option>
           <option value="2">Dispuesto</option>
+          <option value="3">Certificado entregado</option>
         </select>
         <label className="small">Desde <input type="date" value={desde} onChange={(e) => cambiar('desde', e.target.value)} /></label>
         <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => cambiar('hasta', e.target.value)} /></label>
@@ -70,7 +71,7 @@ export default function Manifiestos() {
         {error && <div className="aviso bad">{error}</div>}
         {cargando ? <p className="cargando">Buscando manifiestos…</p> : lista.length === 0 ? <p className="vacio">No hay manifiestos con ese criterio.</p> : (
           <div className="tw"><table>
-            <thead><tr><th>Manifiesto</th><th>Fecha</th><th>Generador</th><th>Residuos</th><th>Etapa</th></tr></thead>
+            <thead><tr><th>Manifiesto</th><th>Fecha</th><th>Generador</th><th>Corrientes</th><th>Cantidad</th><th>Etapa</th></tr></thead>
             <tbody>{lista.map((m) => {
               const it = m.manifiesto_items ?? []
               return (
@@ -78,8 +79,9 @@ export default function Manifiestos() {
                   <td className="nw"><b>{fnum(m.numero)}</b>{m.tipo === 'rosa' && <span className="muted small"> rosa</span>}</td>
                   <td className="nw">{fd(m.fecha)}</td>
                   <td>{m.generadores?.nombre}</td>
-                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo} · {num(i.cantidad)} {umL(i.um)}</span>)}</td>
-                  <td>{m.anulado ? <span className="pill bad">Anulado</span> : <PillEtapa etapa={etapaManifiesto(it.map((i) => i.estado))} />}</td>
+                  <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo}</span>)}</td>
+                  <td className="nw">{it.map((i) => `${num(i.cantidad)} ${umL(i.um)}`).join(' + ')}</td>
+                  <td>{m.anulado ? <span className="pill bad">Anulado</span> : <span className="etapa-celda"><MiniEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /><PillEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /></span>}</td>
                 </tr>)
             })}</tbody>
           </table></div>)}
