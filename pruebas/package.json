@@ -1,0 +1,14 @@
+{
+  "name": "gestion-serco-pruebas",
+  "private": true,
+  "description": "Pruebas automáticas de Gestión Serco con Playwright",
+  "scripts": {
+    "probar": "playwright test",
+    "ver": "playwright test --headed",
+    "informe": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "dotenv": "16.4.5"
+  }
+}

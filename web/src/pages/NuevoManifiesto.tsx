@@ -60,7 +60,7 @@ export default function NuevoManifiesto() {
         const l = (data ?? []) as Transp[]
         setTransportistas(l)
         const serco = l.find((t) => t.nombre === 'SERCO AMBIENTAL SA') ?? l.find((t) => t.emite_manifiestos)
-        if (serco) setTransportista(String(serco.id))
+        if (serco) setTransportista((t) => t || String(serco.id))   // si ya eligieron otro mientras cargaba, no se pisa
       })
     traerTodo<Gen>(() => supabase.from('generadores').select('id, nombre, cuit, generador_principal_id, hab_mun_vto, actividad').eq('activo', true).order('nombre'))
       .then(({ data }) => setGeneradores(data))

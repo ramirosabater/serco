@@ -240,7 +240,7 @@ function CargaResiduos({ m, esAdmin, corrigiendo, onListo, onCancelar }: { m: Ma
           {renglones.length >= 7 && <span className="muted small"> No entran más renglones.</span>}</div>
         <div className="bar">
           {corrigiendo && <button type="button" onClick={onCancelar}>Cancelar</button>}
-          <button className="pri" disabled={enviando}>{enviando ? 'Guardando…' : corrigiendo ? 'Guardar cambios' : 'Guardar: ingresó a planta'}</button>
+          <button className="pri" disabled={enviando || !corrientes.length}>{enviando ? 'Guardando…' : corrigiendo ? 'Guardar cambios' : 'Guardar: ingresó a planta'}</button>
         </div>
       </div>
     </form>
