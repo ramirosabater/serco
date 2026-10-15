@@ -127,6 +127,10 @@ def main():
             cur.execute(f'alter table {t} enable trigger user')
         for tabla, nombre, defin in reglas:
             cur.execute(f'alter table {tabla} add constraint {nombre} {defin.replace(" NOT VALID", "")} not valid')
+        # Etapa de cada manifiesto (se mantiene sola con triggers, que estaban apagados durante la carga)
+        cur.execute("select to_regproc('public.recalcular_etapas')")
+        if cur.fetchone()[0]:
+            cur.execute('select recalcular_etapas()')
         db.commit()
     except Exception as e:
         db.rollback()
@@ -144,7 +148,7 @@ def main():
         bien &= ok
         print(f'  {nombre:<20} {hay:>7,}'.replace(',', '.') + ('' if ok else f'   ← se esperaban {esperado[tabla]:,}'.replace(',', '.')))
     print('Todo coincide.' if bien else 'Atención: hay diferencias con el Access. Revisalas antes de seguir.')
-    print('Siguiente paso: correr 3-reglas.sql en el SQL Editor (si todavía no lo hiciste).')
+    print('Siguiente paso: si todavía no corriste los archivos de reglas (02 a 07), corrélos ahora en el SQL Editor; después, el del administrador.')
 
 
 if __name__ == '__main__':

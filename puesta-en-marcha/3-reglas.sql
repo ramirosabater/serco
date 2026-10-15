@@ -547,17 +547,8 @@ $$;
 revoke execute on function cerrar_certificados_avisados() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------
--- Programación diaria (07:00 de Argentina = 10:00 UTC)
--- Requiere las extensiones pg_cron y pg_net (Database → Extensions) y dos
--- secretos en el Vault: project_url y service_role_key. Ver README.
+-- Programación diaria (07:00 de Argentina = 10:00 UTC): ver puesta-en-marcha/actualizaciones/activar-avisos.sql
 -- ---------------------------------------------------------------------
--- select cron.schedule('avisos-diarios', '0 10 * * *', $$
---   select net.http_post(
---     url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/avisos',
---     headers := jsonb_build_object('Content-Type', 'application/json',
---       'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')),
---     body := '{}'::jsonb)
--- $$);
 
 -- ===================== 20261008000006_permisos_supabase.sql =====================
 -- =====================================================================
@@ -776,13 +767,85 @@ insert into parametros (clave, valor, descripcion) values
 on conflict (clave) do nothing;
 
 -- ---------------------------------------------------------------------
--- Etapa de un manifiesto (la del residuo más atrasado): 0 almacenado, 1 en tránsito, 2 dispuesto.
--- Es una "columna calculada": la app la pide y filtra como manifiestos.etapa.
+-- Etapa de un manifiesto (la del residuo más atrasado): 0 almacenado, 1 en tránsito, 2 dispuesto,
+-- 3 certificado entregado (el certificado ya se le mandó al cliente).
+-- Se guarda en su propia tabla y se mantiene sola con triggers, para poder filtrar rápido
+-- (calcularla al vuelo sobre 30.000 manifiestos tardaba varios segundos).
 -- ---------------------------------------------------------------------
+create table if not exists manifiesto_etapas (
+  manifiesto_id bigint primary key references manifiestos(id) on delete cascade,
+  etapa smallint not null default 0
+);
+create index if not exists manifiesto_etapas_etapa_idx on manifiesto_etapas (etapa, manifiesto_id);
+alter table manifiesto_etapas enable row level security;
+drop policy if exists etapas_leer on manifiesto_etapas;
+create policy etapas_leer on manifiesto_etapas for select using (
+  (select es_interno()) or manifiesto_id in (select m.id from manifiestos m where m.generador_id in (select mis_generadores())));
+revoke all on manifiesto_etapas from anon;
+revoke insert, update, delete on manifiesto_etapas from authenticated;
+grant select on manifiesto_etapas to authenticated;
+
+create or replace function calcular_etapa(p_id bigint) returns smallint
+language sql stable set search_path = public as $$
+  select coalesce(min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                               else case when c.enviado_cliente is not null then 3 else 2 end end), 0)::smallint
+  from manifiesto_items i left join certificados c on c.id = i.certificado_id
+  where i.manifiesto_id = p_id
+$$;
+
+create or replace function actualizar_etapa(p_id bigint) returns void
+language sql security definer set search_path = public as $$
+  insert into manifiesto_etapas (manifiesto_id, etapa) values (p_id, calcular_etapa(p_id))
+  on conflict (manifiesto_id) do update set etapa = excluded.etapa
+  where manifiesto_etapas.etapa is distinct from excluded.etapa
+$$;
+
+create or replace function trg_items_etapa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op <> 'DELETE' then perform actualizar_etapa(new.manifiesto_id); end if;
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.manifiesto_id <> new.manifiesto_id) then
+    perform actualizar_etapa(old.manifiesto_id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists items_etapa on manifiesto_items;
+create trigger items_etapa after insert or delete or update of estado, certificado_id, manifiesto_id
+  on manifiesto_items for each row execute function trg_items_etapa();
+
+create or replace function trg_cert_etapa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform actualizar_etapa(x.manifiesto_id)
+  from (select distinct manifiesto_id from manifiesto_items where certificado_id = new.id) x;
+  return null;
+end $$;
+drop trigger if exists certificados_etapa on certificados;
+create trigger certificados_etapa after update of enviado_cliente on certificados
+  for each row execute function trg_cert_etapa();
+
+-- Recalcula todas (se usa una vez acá y después de recargar la historia del Access)
+create or replace function recalcular_etapas() returns integer
+language sql security definer set search_path = public as $$
+  with calc as (
+    select m.id, coalesce(x.e, 0)::smallint e
+    from manifiestos m left join (
+      select i.manifiesto_id, min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                                   else case when c.enviado_cliente is not null then 3 else 2 end end) e
+      from manifiesto_items i left join certificados c on c.id = i.certificado_id group by 1) x on x.manifiesto_id = m.id
+  ), ins as (
+    insert into manifiesto_etapas (manifiesto_id, etapa) select id, e from calc
+    on conflict (manifiesto_id) do update set etapa = excluded.etapa
+    where manifiesto_etapas.etapa is distinct from excluded.etapa
+    returning 1)
+  select count(*)::int from ins
+$$;
+select recalcular_etapas();
+
+-- La app pide manifiestos.etapa como si fuera una columna (para filtrar usa manifiesto_etapas)
 create or replace function etapa(m manifiestos) returns int
 language sql stable set search_path = public as $$
-  select coalesce(min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1 else 2 end), 0)
-  from manifiesto_items i where i.manifiesto_id = m.id
+  select coalesce((select e.etapa from manifiesto_etapas e where e.manifiesto_id = m.id), 0)::int
 $$;
 
 -- ---------------------------------------------------------------------
@@ -791,8 +854,10 @@ $$;
 create or replace function tablero_resumen(p_desde date, p_hasta date)
 returns jsonb language sql stable set search_path = public as $$
   with etapas as (
-    select min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1 else 2 end) etapa
+    select min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                             else case when c.enviado_cliente is not null then 3 else 2 end end) etapa
     from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+    left join certificados c on c.id = i.certificado_id
     where not m.anulado and m.fecha between p_desde and p_hasta
     group by m.id
   ), meses as (
@@ -811,11 +876,14 @@ returns jsonb language sql stable set search_path = public as $$
     where a.tipo = 'generador' and a.estado in ('vencido', 'por_vencer', 'sin_cargar')
   )
   select jsonb_build_object(
-    'etapas', (select jsonb_build_array(count(*) filter (where etapa = 0), count(*) filter (where etapa = 1), count(*) filter (where etapa = 2)) from etapas),
+    'etapas', (select jsonb_build_array(count(*) filter (where etapa = 0), count(*) filter (where etapa = 1), count(*) filter (where etapa = 2), count(*) filter (where etapa = 3)) from etapas),
     'meses', (select jsonb_agg(jsonb_build_object('mes', to_char(me.mes, 'YYYY-MM'), 'kgs', coalesce(v.kgs, 0), 'lts', coalesce(v.lts, 0)) order by me.mes)
               from meses me left join vol v on v.mes = me.mes),
     'regularizar', (select coalesce(jsonb_agg(r order by case r.estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, r.vto desc nulls last), '[]')
-                    from (select * from regularizar order by case estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, vto desc nulls last limit 10) r),
+                    from (select * from regularizar order by case estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, vto desc nulls last limit 12) r),
+    'kgs', (select coalesce(sum(i.cantidad), 0) from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+            where not m.anulado and m.fecha between p_desde and p_hasta and i.um = 'KGS'),
+    'generadores', (select count(distinct generador_id) from manifiestos where not anulado and fecha between p_desde and p_hasta),
     'regularizar_total', (select jsonb_build_object('vencido', count(distinct id) filter (where estado = 'vencido'),
                                                     'por_vencer', count(distinct id) filter (where estado = 'por_vencer'),
                                                     'sin_cargar', count(distinct id) filter (where estado = 'sin_cargar')) from regularizar)
@@ -978,6 +1046,7 @@ exception when others then raise notice 'No se pudo apagar JIT para authenticate
 end $$;
 
 -- Permisos
+revoke execute on function calcular_etapa(bigint), actualizar_etapa(bigint), recalcular_etapas(), trg_items_etapa(), trg_cert_etapa() from public, anon, authenticated;
 revoke execute on function etapa(manifiestos), tablero_resumen(date, date), historial_manifiesto(bigint), generador_resumen(bigint),
   reporte_por_producto(date, date, text, bigint, bigint), estadisticas(date, date), ultimos_ingresos(), destinos_habituales() from public, anon;
 grant execute on function etapa(manifiestos), tablero_resumen(date, date), historial_manifiesto(bigint), generador_resumen(bigint),
@@ -989,3 +1058,260 @@ grant execute on function etapa(manifiestos), tablero_resumen(date, date), histo
 -- Se puede correr más de una vez.
 alter table choferes add column if not exists dni text;
 update choferes set dni = carnet_nro where dni is null and carnet_nro ~ '^\d{7,8}$';
+
+-- ===================== 20261014000010_etapa_iniciado.sql =====================
+-- SGRP 2.0 · Etapa "Iniciado".
+-- El manifiesto se emite con las secciones 1, 2, 4 y 5 del formulario (generador, transportista,
+-- vehículo, chofer, instrucciones). La sección 3 (residuos, contenedores y cantidades) se carga
+-- cuando la carga llega a la planta: recién ahí queda "Almacenado".
+-- Etapas: 0 iniciado · 1 almacenado · 2 en tránsito · 3 dispuesto · 4 certificado entregado.
+-- Se puede correr más de una vez.
+
+alter table manifiestos add column if not exists ingreso_planta date;
+comment on column manifiestos.ingreso_planta is 'Día en que la carga entró a la planta y se cargó la sección 3 (desde ahí corre el plazo en planta)';
+
+-- ---------------------------------------------------------------------
+-- Emitir: ya no exige residuos (si vienen, se cargan igual: sirve para los formularios rosa)
+-- ---------------------------------------------------------------------
+create or replace function emitir_manifiesto(p jsonb) returns jsonb
+language plpgsql set search_path = public as $$
+declare
+  v_id bigint; v_tr bigint := (p->>'transportista_id')::bigint; v_num text := p->>'numero';
+  v_sug text; v_aviso text; v_emite boolean; it jsonb; v_hay boolean;
+begin
+  if not puede_editar() and auth.uid() is not null then raise exception 'Tu usuario no puede emitir manifiestos'; end if;
+  if v_num !~ '^\d{9}$' then raise exception 'El número tiene que tener 9 dígitos, como figura en el formulario (ej. 837007470)'; end if;
+  if exists (select 1 from manifiestos where transportista_id = v_tr and numero = v_num) then
+    raise exception 'El formulario % ya está usado', left(v_num, 3) || '-' || substr(v_num, 4);
+  end if;
+  v_sug := sugerir_numero(v_tr);
+  if v_sug is not null and left(v_sug, 3) = left(v_num, 3) and v_num > v_sug then
+    v_aviso := 'Se saltearon formularios: el siguiente era ' || left(v_sug, 3) || '-' || substr(v_sug, 4)
+               || '. Si se perdieron o rompieron, hay que anularlos.';
+  end if;
+  select emite_manifiestos into v_emite from transportistas where id = v_tr;
+  v_hay := jsonb_array_length(coalesce(p->'items', '[]')) > 0;
+
+  insert into manifiestos (numero, transportista_id, tipo, fecha, generador_id, generador_principal_id, direccion_retiro,
+                           chofer_id, camion_id, nota, validacion_omitida, instrucciones, ingreso_planta, creado_por)
+  values (v_num, v_tr, case when v_emite then 'azul' else 'rosa' end::tipo_manifiesto,
+          coalesce((p->>'fecha')::date, current_date), (p->>'generador_id')::bigint,
+          (p->>'generador_principal_id')::bigint, p->>'direccion_retiro', (p->>'chofer_id')::bigint,
+          (p->>'camion_id')::bigint, p->>'nota', p->>'validacion_omitida', p->'instrucciones',
+          case when v_hay then coalesce((p->>'fecha')::date, current_date) end, auth.uid())
+  returning id into v_id;
+
+  for it in select * from jsonb_array_elements(coalesce(p->'items', '[]')) loop
+    insert into manifiesto_items (manifiesto_id, corriente_id, contenedor, cant_estimada, cantidad, um)
+    values (v_id, (it->>'corriente_id')::bigint, it->>'contenedor', (it->>'cant_estimada')::numeric,
+            (it->>'cantidad')::numeric, (it->>'um')::unidad_medida);
+  end loop;
+  if coalesce((select valor from parametros where clave = 'bloquear_generador'), 'si') <> 'si'
+     and coalesce(array_length(problemas_generador((p->>'generador_id')::bigint, coalesce((p->>'fecha')::date, current_date)), 1), 0) > 0 then
+    v_aviso := concat_ws(' · ', v_aviso, array_to_string(problemas_generador((p->>'generador_id')::bigint,
+                                                          coalesce((p->>'fecha')::date, current_date)), ' · '));
+  end if;
+  return jsonb_build_object('id', v_id, 'numero', v_num, 'aviso', v_aviso);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Ingreso a planta: se carga la sección 3. Mientras todo siga almacenado, se puede corregir
+-- (se reemplazan los renglones).
+-- ---------------------------------------------------------------------
+create or replace function cargar_residuos(p_manifiesto bigint, p_items jsonb, p_ingreso date default null,
+                                           p_validacion_omitida text default null) returns integer
+language plpgsql set search_path = public as $$
+declare m manifiestos; it jsonb; n int := 0;
+begin
+  if not puede_editar() and auth.uid() is not null then raise exception 'Tu usuario no puede cargar residuos'; end if;
+  select * into m from manifiestos where id = p_manifiesto for update;
+  if m.id is null then raise exception 'No existe el manifiesto'; end if;
+  if m.anulado then raise exception 'El manifiesto está anulado'; end if;
+  if jsonb_array_length(coalesce(p_items, '[]')) = 0 then raise exception 'Cargá al menos un residuo con su cantidad'; end if;
+  if jsonb_array_length(p_items) > 7 then raise exception 'El formulario tiene 7 renglones'; end if;
+  if exists (select 1 from manifiesto_items where manifiesto_id = p_manifiesto and estado <> 'almacenado') then
+    raise exception 'Hay residuos de este manifiesto que ya salieron de la planta: no se pueden cambiar';
+  end if;
+  -- El motivo para pasar por alto una corriente no habilitada queda en el manifiesto (lo controla validar_item)
+  if p_validacion_omitida is not null and m.validacion_omitida is distinct from p_validacion_omitida then
+    update manifiestos set validacion_omitida = concat_ws(' · ', validacion_omitida, p_validacion_omitida) where id = p_manifiesto;
+  end if;
+  delete from manifiesto_items where manifiesto_id = p_manifiesto;
+  for it in select * from jsonb_array_elements(p_items) loop
+    if coalesce((it->>'cantidad')::numeric, 0) <= 0 then raise exception 'Falta la cantidad real de un residuo'; end if;
+    insert into manifiesto_items (manifiesto_id, corriente_id, contenedor, cant_estimada, cantidad, um)
+    values (p_manifiesto, (it->>'corriente_id')::bigint, nullif(it->>'contenedor', ''), (it->>'cant_estimada')::numeric,
+            (it->>'cantidad')::numeric, (it->>'um')::unidad_medida);
+    n := n + 1;
+  end loop;
+  update manifiestos set ingreso_planta = coalesce(p_ingreso, ingreso_planta, current_date) where id = p_manifiesto;
+  return n;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Etapas con "Iniciado"
+-- ---------------------------------------------------------------------
+create or replace function calcular_etapa(p_id bigint) returns smallint
+language sql stable set search_path = public as $$
+  select coalesce(min(case i.estado when 'almacenado' then 1 when 'en_transito' then 2
+                               else case when c.enviado_cliente is not null then 4 else 3 end end), 0)::smallint
+  from manifiesto_items i left join certificados c on c.id = i.certificado_id
+  where i.manifiesto_id = p_id
+$$;
+
+create or replace function recalcular_etapas() returns integer
+language sql security definer set search_path = public as $$
+  with calc as (
+    select m.id, coalesce(x.e, 0)::smallint e
+    from manifiestos m left join (
+      select i.manifiesto_id, min(case i.estado when 'almacenado' then 1 when 'en_transito' then 2
+                                   else case when c.enviado_cliente is not null then 4 else 3 end end) e
+      from manifiesto_items i left join certificados c on c.id = i.certificado_id group by 1) x on x.manifiesto_id = m.id
+  ), ins as (
+    insert into manifiesto_etapas (manifiesto_id, etapa) select id, e from calc
+    on conflict (manifiesto_id) do update set etapa = excluded.etapa
+    where manifiesto_etapas.etapa is distinct from excluded.etapa
+    returning 1)
+  select count(*)::int from ins
+$$;
+
+-- Al emitir sin residuos también tiene que existir su fila (etapa 0)
+create or replace function trg_manifiesto_etapa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into manifiesto_etapas (manifiesto_id, etapa) values (new.id, 0) on conflict do nothing;
+  return null;
+end $$;
+drop trigger if exists manifiestos_etapa on manifiestos;
+create trigger manifiestos_etapa after insert on manifiestos for each row execute function trg_manifiesto_etapa();
+revoke execute on function trg_manifiesto_etapa() from public, anon, authenticated;
+
+select recalcular_etapas();
+
+create or replace function tablero_resumen(p_desde date, p_hasta date)
+returns jsonb language sql stable set search_path = public as $$
+  with etapas as (
+    select coalesce(e.etapa, 0) etapa
+    from manifiestos m left join manifiesto_etapas e on e.manifiesto_id = m.id
+    where not m.anulado and m.fecha between p_desde and p_hasta
+  ), meses as (
+    select generate_series(date_trunc('month', current_date) - interval '11 months', date_trunc('month', current_date), interval '1 month')::date mes
+  ), vol as (
+    select date_trunc('month', m.fecha)::date mes,
+           sum(i.cantidad) filter (where i.um = 'KGS') kgs, sum(i.cantidad) filter (where i.um = 'LTS') lts
+    from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+    where not m.anulado and m.fecha >= date_trunc('month', current_date) - interval '11 months'
+    group by 1
+  ), activos as (
+    select distinct generador_id from manifiestos where not anulado and fecha >= current_date - 365
+  ), regularizar as (
+    select a.id, a.nombre, a.documento, a.vto, a.estado
+    from alertas_vencimiento a join activos x on x.generador_id = a.id
+    where a.tipo = 'generador' and a.estado in ('vencido', 'por_vencer', 'sin_cargar')
+  )
+  select jsonb_build_object(
+    'etapas', (select jsonb_build_array(count(*) filter (where etapa = 0), count(*) filter (where etapa = 1), count(*) filter (where etapa = 2),
+                                        count(*) filter (where etapa = 3), count(*) filter (where etapa = 4)) from etapas),
+    'meses', (select jsonb_agg(jsonb_build_object('mes', to_char(me.mes, 'YYYY-MM'), 'kgs', coalesce(v.kgs, 0), 'lts', coalesce(v.lts, 0)) order by me.mes)
+              from meses me left join vol v on v.mes = me.mes),
+    'regularizar', (select coalesce(jsonb_agg(r order by case r.estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, r.vto desc nulls last), '[]')
+                    from (select * from regularizar order by case estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, vto desc nulls last limit 12) r),
+    'kgs', (select coalesce(sum(i.cantidad), 0) from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+            where not m.anulado and m.fecha between p_desde and p_hasta and i.um = 'KGS'),
+    'generadores', (select count(distinct generador_id) from manifiestos where not anulado and fecha between p_desde and p_hasta),
+    'regularizar_total', (select jsonb_build_object('vencido', count(distinct id) filter (where estado = 'vencido'),
+                                                    'por_vencer', count(distinct id) filter (where estado = 'por_vencer'),
+                                                    'sin_cargar', count(distinct id) filter (where estado = 'sin_cargar')) from regularizar)
+  )
+$$;
+
+-- ---------------------------------------------------------------------
+-- El plazo en planta corre desde el ingreso a planta (si no hay, desde el retiro, como en el Access)
+-- ---------------------------------------------------------------------
+create or replace view residuos_en_planta with (security_invoker = true) as
+  with p as materialized (select parametro_int('plazo_planta_dias', 365) as plazo)
+  select i.id, m.id as manifiesto_id, m.numero, m.fecha,
+         current_date - coalesce(m.ingreso_planta, m.fecha) as dias_en_planta,
+         p.plazo - (current_date - coalesce(m.ingreso_planta, m.fecha)) as dias_restantes,
+         m.generador_principal_id, gp.nombre as planta, g.nombre as generador,
+         c.id as corriente_id, c.codigo as corriente, c.grupo_incompat, i.contenedor, i.cantidad, i.um
+  from manifiesto_items i
+  join manifiestos m on m.id = i.manifiesto_id and not m.anulado
+  join generadores g on g.id = m.generador_id
+  join corrientes c on c.id = i.corriente_id
+  left join generadores_principales gp on gp.id = m.generador_principal_id
+  cross join p
+  where i.estado = 'almacenado';
+
+revoke execute on function cargar_residuos(bigint, jsonb, date, text) from public, anon;
+grant execute on function cargar_residuos(bigint, jsonb, date, text), tablero_resumen(date, date) to authenticated;
+
+-- ===================== 20261015000011_mayusculas.sql =====================
+-- SGRP 2.0 · Todo en mayúsculas.
+-- Pasa a mayúsculas los nombres, direcciones, notas y demás textos de los datos migrados del
+-- Access, y deja un trigger para que lo que se cargue desde ahora también quede en mayúsculas.
+-- No se tocan: mails, CUIT, teléfonos, números de formulario, rutas de archivos ni parámetros.
+-- Se puede correr más de una vez.
+
+-- upper() + las vocales acentuadas y la ñ, por si la base no las convierte sola
+create or replace function mayus(t text) returns text
+language sql immutable parallel safe set search_path = public as $$
+  select translate(upper(t), 'áéíóúüñàèìòù', 'ÁÉÍÓÚÜÑÀÈÌÒÙ')
+$$;
+
+-- Trigger genérico: pasa a mayúsculas las columnas que se le indican como argumentos
+create or replace function trg_mayusculas() returns trigger
+language plpgsql set search_path = public as $$
+declare j jsonb := to_jsonb(new); c text;
+begin
+  foreach c in array tg_argv loop
+    if j ? c and jsonb_typeof(j->c) = 'string' and j->>c <> mayus(j->>c) then
+      j := jsonb_set(j, array[c], to_jsonb(mayus(j->>c)));
+    end if;
+  end loop;
+  return jsonb_populate_record(new, j);
+end $$;
+
+do $$
+declare
+  r record; c text; sets text;
+  cols jsonb := '{
+    "actividades":             ["nombre"],
+    "generadores":             ["nombre","actividad","direccion","ciudad","provincia","contacto_nombre","contacto_apellido","contacto_cargo","notas","modo_retiro","cod_iva","hab_mun_nro","hab_com_nro"],
+    "generador_direcciones":   ["direccion","ciudad","provincia"],
+    "generadores_principales": ["nombre","direccion","ciudad","provincia","hab_mun_nro","hab_pro_nro","hab_nac_nro"],
+    "transportistas":          ["nombre","direccion","localidad","provincia","hab_mun_nro","hab_pro_nro","hab_nac_nro","ret_env_amb"],
+    "operadores":              ["nombre","direccion","localidad","provincia","hab_mun_nro","hab_pro_nro","hab_nac_nro"],
+    "camiones":                ["patente","tipo","carga_pel_nro"],
+    "choferes":                ["nombre","carnet_nro"],
+    "corrientes":              ["descripcion","estado_fisico"],
+    "manifiestos":             ["direccion_retiro","nota","forma_transporte","anulado_motivo","validacion_omitida"],
+    "manifiesto_items":        ["contenedor","descripcion_egreso"],
+    "manifiestos_nacion":      ["validacion_omitida"],
+    "certificados":            ["tipo_tratamiento"]
+  }';
+begin
+  for r in select key t, value v from jsonb_each(cols) loop
+    -- solo las columnas que existen en esta base
+    select string_agg(format('%I = mayus(%I)', x, x), ', '), string_agg(format('%I <> mayus(%I)', x, x), ' or ')
+      into sets, c
+      from jsonb_array_elements_text(r.v) x
+     where exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = r.t and column_name = x);
+    if sets is null then continue; end if;
+
+    -- Los datos de siempre: sin disparar el historial ni las validaciones (es solo el formato)
+    execute format('alter table %I disable trigger user', r.t);
+    execute format('update %I set %s where %s', r.t, sets, c);
+    execute format('alter table %I enable trigger user', r.t);
+
+    -- Lo que se cargue desde ahora
+    execute format('drop trigger if exists aa_mayusculas on %I', r.t);
+    execute format('create trigger aa_mayusculas before insert or update on %I for each row execute function trg_mayusculas(%s)',
+                   r.t, (select string_agg(quote_literal(x), ', ') from jsonb_array_elements_text(r.v) x
+                          where exists (select 1 from information_schema.columns
+                                         where table_schema = 'public' and table_name = r.t and column_name = x)));
+  end loop;
+end $$;
+
+revoke execute on function trg_mayusculas() from public, anon, authenticated;

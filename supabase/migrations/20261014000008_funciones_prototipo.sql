@@ -63,13 +63,85 @@ insert into parametros (clave, valor, descripcion) values
 on conflict (clave) do nothing;
 
 -- ---------------------------------------------------------------------
--- Etapa de un manifiesto (la del residuo más atrasado): 0 almacenado, 1 en tránsito, 2 dispuesto.
--- Es una "columna calculada": la app la pide y filtra como manifiestos.etapa.
+-- Etapa de un manifiesto (la del residuo más atrasado): 0 almacenado, 1 en tránsito, 2 dispuesto,
+-- 3 certificado entregado (el certificado ya se le mandó al cliente).
+-- Se guarda en su propia tabla y se mantiene sola con triggers, para poder filtrar rápido
+-- (calcularla al vuelo sobre 30.000 manifiestos tardaba varios segundos).
 -- ---------------------------------------------------------------------
+create table if not exists manifiesto_etapas (
+  manifiesto_id bigint primary key references manifiestos(id) on delete cascade,
+  etapa smallint not null default 0
+);
+create index if not exists manifiesto_etapas_etapa_idx on manifiesto_etapas (etapa, manifiesto_id);
+alter table manifiesto_etapas enable row level security;
+drop policy if exists etapas_leer on manifiesto_etapas;
+create policy etapas_leer on manifiesto_etapas for select using (
+  (select es_interno()) or manifiesto_id in (select m.id from manifiestos m where m.generador_id in (select mis_generadores())));
+revoke all on manifiesto_etapas from anon;
+revoke insert, update, delete on manifiesto_etapas from authenticated;
+grant select on manifiesto_etapas to authenticated;
+
+create or replace function calcular_etapa(p_id bigint) returns smallint
+language sql stable set search_path = public as $$
+  select coalesce(min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                               else case when c.enviado_cliente is not null then 3 else 2 end end), 0)::smallint
+  from manifiesto_items i left join certificados c on c.id = i.certificado_id
+  where i.manifiesto_id = p_id
+$$;
+
+create or replace function actualizar_etapa(p_id bigint) returns void
+language sql security definer set search_path = public as $$
+  insert into manifiesto_etapas (manifiesto_id, etapa) values (p_id, calcular_etapa(p_id))
+  on conflict (manifiesto_id) do update set etapa = excluded.etapa
+  where manifiesto_etapas.etapa is distinct from excluded.etapa
+$$;
+
+create or replace function trg_items_etapa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op <> 'DELETE' then perform actualizar_etapa(new.manifiesto_id); end if;
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.manifiesto_id <> new.manifiesto_id) then
+    perform actualizar_etapa(old.manifiesto_id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists items_etapa on manifiesto_items;
+create trigger items_etapa after insert or delete or update of estado, certificado_id, manifiesto_id
+  on manifiesto_items for each row execute function trg_items_etapa();
+
+create or replace function trg_cert_etapa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform actualizar_etapa(x.manifiesto_id)
+  from (select distinct manifiesto_id from manifiesto_items where certificado_id = new.id) x;
+  return null;
+end $$;
+drop trigger if exists certificados_etapa on certificados;
+create trigger certificados_etapa after update of enviado_cliente on certificados
+  for each row execute function trg_cert_etapa();
+
+-- Recalcula todas (se usa una vez acá y después de recargar la historia del Access)
+create or replace function recalcular_etapas() returns integer
+language sql security definer set search_path = public as $$
+  with calc as (
+    select m.id, coalesce(x.e, 0)::smallint e
+    from manifiestos m left join (
+      select i.manifiesto_id, min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                                   else case when c.enviado_cliente is not null then 3 else 2 end end) e
+      from manifiesto_items i left join certificados c on c.id = i.certificado_id group by 1) x on x.manifiesto_id = m.id
+  ), ins as (
+    insert into manifiesto_etapas (manifiesto_id, etapa) select id, e from calc
+    on conflict (manifiesto_id) do update set etapa = excluded.etapa
+    where manifiesto_etapas.etapa is distinct from excluded.etapa
+    returning 1)
+  select count(*)::int from ins
+$$;
+select recalcular_etapas();
+
+-- La app pide manifiestos.etapa como si fuera una columna (para filtrar usa manifiesto_etapas)
 create or replace function etapa(m manifiestos) returns int
 language sql stable set search_path = public as $$
-  select coalesce(min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1 else 2 end), 0)
-  from manifiesto_items i where i.manifiesto_id = m.id
+  select coalesce((select e.etapa from manifiesto_etapas e where e.manifiesto_id = m.id), 0)::int
 $$;
 
 -- ---------------------------------------------------------------------
@@ -78,8 +150,10 @@ $$;
 create or replace function tablero_resumen(p_desde date, p_hasta date)
 returns jsonb language sql stable set search_path = public as $$
   with etapas as (
-    select min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1 else 2 end) etapa
+    select min(case i.estado when 'almacenado' then 0 when 'en_transito' then 1
+                             else case when c.enviado_cliente is not null then 3 else 2 end end) etapa
     from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+    left join certificados c on c.id = i.certificado_id
     where not m.anulado and m.fecha between p_desde and p_hasta
     group by m.id
   ), meses as (
@@ -98,11 +172,14 @@ returns jsonb language sql stable set search_path = public as $$
     where a.tipo = 'generador' and a.estado in ('vencido', 'por_vencer', 'sin_cargar')
   )
   select jsonb_build_object(
-    'etapas', (select jsonb_build_array(count(*) filter (where etapa = 0), count(*) filter (where etapa = 1), count(*) filter (where etapa = 2)) from etapas),
+    'etapas', (select jsonb_build_array(count(*) filter (where etapa = 0), count(*) filter (where etapa = 1), count(*) filter (where etapa = 2), count(*) filter (where etapa = 3)) from etapas),
     'meses', (select jsonb_agg(jsonb_build_object('mes', to_char(me.mes, 'YYYY-MM'), 'kgs', coalesce(v.kgs, 0), 'lts', coalesce(v.lts, 0)) order by me.mes)
               from meses me left join vol v on v.mes = me.mes),
     'regularizar', (select coalesce(jsonb_agg(r order by case r.estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, r.vto desc nulls last), '[]')
-                    from (select * from regularizar order by case estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, vto desc nulls last limit 10) r),
+                    from (select * from regularizar order by case estado when 'vencido' then 0 when 'por_vencer' then 1 else 2 end, vto desc nulls last limit 12) r),
+    'kgs', (select coalesce(sum(i.cantidad), 0) from manifiestos m join manifiesto_items i on i.manifiesto_id = m.id
+            where not m.anulado and m.fecha between p_desde and p_hasta and i.um = 'KGS'),
+    'generadores', (select count(distinct generador_id) from manifiestos where not anulado and fecha between p_desde and p_hasta),
     'regularizar_total', (select jsonb_build_object('vencido', count(distinct id) filter (where estado = 'vencido'),
                                                     'por_vencer', count(distinct id) filter (where estado = 'por_vencer'),
                                                     'sin_cargar', count(distinct id) filter (where estado = 'sin_cargar')) from regularizar)
@@ -265,6 +342,7 @@ exception when others then raise notice 'No se pudo apagar JIT para authenticate
 end $$;
 
 -- Permisos
+revoke execute on function calcular_etapa(bigint), actualizar_etapa(bigint), recalcular_etapas(), trg_items_etapa(), trg_cert_etapa() from public, anon, authenticated;
 revoke execute on function etapa(manifiestos), tablero_resumen(date, date), historial_manifiesto(bigint), generador_resumen(bigint),
   reporte_por_producto(date, date, text, bigint, bigint), estadisticas(date, date), ultimos_ingresos(), destinos_habituales() from public, anon;
 grant execute on function etapa(manifiestos), tablero_resumen(date, date), historial_manifiesto(bigint), generador_resumen(bigint),
