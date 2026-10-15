@@ -1,0 +1,28 @@
+# Dependencias y compilados
+node_modules/
+dist/
+__pycache__/
+
+# Configuración local y claves: NUNCA al repositorio
+.env
+.env.*
+!.env.example
+*.local
+
+# Datos reales de Serco: se pasan aparte, no van al repositorio
+puesta-en-marcha/2-datos/datos-migrados.sql.gz
+*.mdb
+*.mde
+RAYGROUP/
+
+# Varios
+.DS_Store
+Thumbs.db
+*.log
+supabase/.temp/
+
+# Novedades y validación de la migración: tienen datos de Serco
+esperado-*.json
+validacion-*.xlsx
+novedades-*.sql.gz
+novedades-*.txt
