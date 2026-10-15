@@ -11,15 +11,61 @@ const normal = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLower
 const sinAnimacion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /** Escribe el texto de a poco, como si Brote lo estuviera diciendo. Un clic lo completa. */
-function useEscritura(texto: string) {
+function useEscritura(texto: string, msPorLetra: number) {
   const [n, setN] = useState(0)
   useEffect(() => {
     if (sinAnimacion()) { setN(texto.length); return }
     setN(0)
-    const t = window.setInterval(() => setN((x) => { if (x >= texto.length) { window.clearInterval(t); return x } return x + 2 }), 22)
+    const t = window.setInterval(() => setN((x) => { if (x >= texto.length) { window.clearInterval(t); return x } return x + 1 }), msPorLetra)
     return () => window.clearInterval(t)
-  }, [texto])
+  }, [texto, msPorLetra])
   return { mostrado: texto.slice(0, n), listo: n >= texto.length, completar: () => setN(texto.length) }
+}
+
+const hayVoz = typeof window !== 'undefined' && 'speechSynthesis' in window
+const leerPref = () => { try { return localStorage.getItem('brote-voz') !== 'no' } catch { return true } }
+const guardarPref = (v: boolean) => { try { localStorage.setItem('brote-voz', v ? 'si' : 'no') } catch { /* sin almacenamiento */ } }
+
+/** La mejor voz en castellano que tenga la computadora: primero rioplatense, después latina, después España */
+function elegirVoz(): SpeechSynthesisVoice | undefined {
+  const vs = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('es'))
+  const pref = ['es-ar', 'es-uy', 'es-419', 'es-us', 'es-mx', 'es-cl', 'es-co', 'es-es']
+  return vs.sort((a, b) => {
+    const ia = pref.indexOf(a.lang.toLowerCase()), ib = pref.indexOf(b.lang.toLowerCase())
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || Number(b.localService === false) - Number(a.localService === false)
+  })[0]
+}
+
+/** Brote lee el texto en voz alta. Devuelve si está hablando y si ya terminó. */
+function useVoz(texto: string, activa: boolean) {
+  const [hablando, setHablando] = useState(false)
+  const [termino, setTermino] = useState(true)
+  const [, setVoces] = useState(0)
+  useEffect(() => {
+    if (!hayVoz) return
+    const cambio = () => setVoces((n) => n + 1)   // las voces se cargan después de abrir la página
+    window.speechSynthesis.addEventListener?.('voiceschanged', cambio)
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', cambio)
+  }, [])
+  useEffect(() => {
+    if (!hayVoz) return
+    window.speechSynthesis.cancel()
+    if (!activa || !texto) { setHablando(false); setTermino(true); return }
+    const u = new SpeechSynthesisUtterance(texto.replace(/[·•]/g, ',').replace(/[^\p{L}\p{N}\s.,;:¿?¡!()'"-]/gu, ' '))
+    const v = elegirVoz()
+    if (v) u.voice = v
+    u.lang = v?.lang ?? 'es-AR'
+    u.rate = 0.95; u.pitch = 1.15
+    u.onstart = () => setHablando(true)
+    u.onend = u.onerror = () => { setHablando(false); setTermino(true) }
+    setTermino(false)
+    // pequeña pausa: Chrome a veces corta si se habla justo después de cancelar
+    const t = window.setTimeout(() => window.speechSynthesis.speak(u), 120)
+    // por si la computadora no tiene voz o no avisa cuando termina: no dejar trabada la guía
+    const resguardo = window.setTimeout(() => { setHablando(false); setTermino(true) }, 2500 + texto.length * 90)
+    return () => { window.clearTimeout(t); window.clearTimeout(resguardo); window.speechSynthesis.cancel() }
+  }, [texto, activa])
+  return { hablando, termino }
 }
 
 export default function Ayuda() {
@@ -54,19 +100,34 @@ export default function Ayuda() {
     if (paso + 1 < guia.pasos.length) { setPaso(paso + 1); return }
     // Al terminar, Brote festeja un momento
     setAuto(false); setFestejo(true)
-    window.setTimeout(terminar, sinAnimacion() ? 0 : 1400)
+    window.setTimeout(terminar, sinAnimacion() ? 0 : 3500)
   }, [guia, paso, terminar])
 
-  const texto = p ? (rect || !p.sel ? p.texto : (p.falta ?? 'Esperando que aparezca en pantalla…')) : ''
-  const { mostrado, listo, completar } = useEscritura(texto)
-  const esperaAccion = !!p && ((!!p.sel && !rect) || !!p.alTocar)
+  // Si el elemento tarda (la pantalla está cargando), no se avisa enseguida que falta: se espera un poco
+  const [falta, setFalta] = useState(false)
+  const hayRect = !!rect
+  useEffect(() => {
+    setFalta(false)
+    if (!p?.sel || hayRect) return
+    const t = window.setTimeout(() => setFalta(true), 2500)
+    return () => window.clearTimeout(t)
+  }, [p, hayRect])
+  const texto = p ? (rect || !p.sel || !falta ? p.texto : (p.falta ?? 'Esperando que aparezca en pantalla…')) : ''
+  const [voz, setVoz] = useState(leerPref)
+  const conVoz = voz && hayVoz && !!guia
+  const decir = festejo ? '¡Listo! Eso es todo.' : texto
+  const { hablando, termino } = useVoz(guia ? decir : '', conVoz)
+  // Con voz, el texto aparece al ritmo en que Brote habla; sin voz, un poco más rápido
+  const { mostrado, listo, completar } = useEscritura(texto, conVoz ? 62 : 38)
+  const esperaAccion = !!p && ((!!p.sel && !rect) || !!p.alTocar)   // en modo Mostrame, acá Brote espera
 
   // Modo "Mostrame": cuando termina de explicar, pasa solo al siguiente (salvo que haga falta tocar algo)
   useEffect(() => {
-    if (!auto || !listo || esperaAccion || festejo) return
-    const t = window.setTimeout(siguiente, 1800 + Math.min(texto.length * 25, 3500))
+    if (!auto || !listo || !termino || esperaAccion || festejo) return
+    // Con voz: espera a que termine de hablar. Sin voz: le da tiempo a leer.
+    const t = window.setTimeout(siguiente, conVoz ? 1500 : 2800 + Math.min(texto.length * 30, 5000))
     return () => window.clearTimeout(t)
-  }, [auto, listo, esperaAccion, festejo, siguiente, texto])
+  }, [auto, listo, termino, conVoz, esperaAccion, festejo, siguiente, texto])
 
   // Hacia dónde señala Brote: del avatar al centro del elemento resaltado
   useEffect(() => {
@@ -178,7 +239,7 @@ export default function Ayuda() {
       {guia && p && <>
         {rect && <div className="ay-foco" style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }} />}
         <div className={`ay-tarjeta${rect ? '' : ' suelta'}`} style={posicion} role="dialog" aria-label={`Guía: ${guia.titulo}`}>
-          <div className="ay-avatar"><Avatar ref={avatar} angulo={festejo ? null : angulo} hablando={!listo} festejo={festejo} /></div>
+          <div className="ay-avatar"><Avatar ref={avatar} angulo={festejo ? null : angulo} hablando={!listo || hablando} festejo={festejo} /></div>
           <div className="ay-meta"><span>{guia.titulo}</span><span>{paso + 1} de {guia.pasos.length}</span></div>
           <div className="ay-progreso" aria-hidden="true"><span style={{ width: `${((paso + 1) / guia.pasos.length) * 100}%` }} /></div>
           <h3>{festejo ? '¡Listo!' : p.titulo}</h3>
@@ -192,6 +253,7 @@ export default function Ayuda() {
           {!festejo && <div className="ay-botones">
             <button className="link" onClick={terminar}>Salir</button>
             <button className="link" onClick={() => setAuto(!auto)} title={auto ? 'Pausar' : 'Que avance solo'}>{auto ? 'Pausar' : '▶ Mostrame'}</button>
+            {hayVoz && <button className="link" onClick={() => { setVoz(!voz); guardarPref(!voz) }} aria-pressed={voz} title="Que Brote lea en voz alta">{voz ? 'Silenciar' : 'Activar voz'}</button>}
             <span style={{ flex: 1 }} />
             {paso > 0 && <button onClick={() => setPaso(paso - 1)}>Anterior</button>}
             <button className="pri" onClick={siguiente}>{paso + 1 >= guia.pasos.length ? 'Listo' : 'Siguiente'}</button>
