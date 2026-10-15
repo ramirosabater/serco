@@ -31,6 +31,19 @@ const ABRIR_MANIFIESTO = 'Abrí un manifiesto de la lista (tocá su fila) y la g
 
 export const GUIAS: Guia[] = [
   {
+    id: 'circuito', titulo: 'El circuito completo de un residuo', grupo: 'Para empezar', pantalla: /^\/$/, roles: EDITAN,
+    pasos: [
+      { ruta: '/', sel: 'tab-etapas', titulo: 'Cinco etapas', texto: 'Cada manifiesto pasa por cinco etapas: Iniciado, Almacenado, En tránsito, Dispuesto y Certificado entregado. Te muestro dónde se hace cada una.' },
+      { ruta: '/manifiestos/nuevo', sel: 'nm-formulario', titulo: '1 · Iniciado: se emite', texto: 'Todo empieza acá. Se cargan las secciones 1, 2, 4 y 5 (generador, transportista, camión, chofer e instrucciones) y se imprime sobre el formulario azul.' },
+      { sel: 'nm-residuos', titulo: 'Los residuos, después', texto: 'La sección 3 no se carga al emitir: se completa cuando la carga entra a planta, con lo que realmente llegó.' },
+      { ruta: '/planta?v=ingresar', sel: 'pl-ingresar', titulo: '2 · Almacenado: entra a planta', texto: 'Cuando llega el camión, se carga la sección 3: corriente, contenedor y cantidades. Desde ese día cuenta el plazo en planta.' },
+      { ruta: '/planta', sel: 'pl-plan', titulo: '3 · En tránsito: viaje a disposición final', texto: 'Con lo almacenado, el sistema propone los viajes según vencimiento, peso y destino. Al armar uno se emite el Manifiesto Nación.' },
+      { ruta: '/planta?v=transito', sel: 'pl-esperando', titulo: '4 · Dispuesto: vuelve el certificado', texto: 'Cuando el operador manda el certificado de disposición final, se registra acá con su PDF.' },
+      { ruta: '/vista-cliente', sel: 'vc-etapas', titulo: '5 · Certificado entregado', texto: 'Al generador le llega un mail y descarga el certificado desde su portal. Así ve él sus retiros, etapa por etapa.' },
+      { ruta: '/manifiestos', sel: 'man-buscar', titulo: 'Seguir cualquier residuo', texto: 'Buscá un manifiesto por número, generador o corriente y abrilo: el recorrido muestra en qué etapa está y sus papeles.' },
+    ],
+  },
+  {
     id: 'emitir', titulo: 'Emitir un manifiesto', grupo: 'Manifiestos', pantalla: /^\/(manifiestos(\/nuevo)?)?$/, roles: EDITAN,
     pasos: [
       { ruta: '/manifiestos', sel: 'man-nuevo', titulo: 'Empezar', texto: 'Tocá "Nuevo manifiesto".', alTocar: true },
