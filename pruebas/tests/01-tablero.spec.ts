@@ -19,15 +19,3 @@ test('la agenda y los vencimientos abren', async ({ page }) => {
   await sinAvisoDeError(page)
 })
 
-test('la ayuda: Brote muestra el circuito completo', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Ayuda' }).click()
-  await page.getByRole('button', { name: /Mostrame el circuito completo/ }).click()
-  await expect(page.locator('.ay-tarjeta .avatar')).toBeVisible()
-  await expect(page.locator('.ay-meta')).toContainText('1 de 8')
-  await page.locator('.ay-tarjeta').getByRole('button', { name: 'Siguiente' }).click()
-  await expect(page).toHaveURL(/\/manifiestos\/nuevo$/)
-  await expect(page.locator('.ay-meta')).toContainText('2 de 8')
-  await page.locator('.ay-tarjeta').getByRole('button', { name: 'Salir' }).click()
-  await expect(page.locator('.ay-tarjeta')).toHaveCount(0)
-})

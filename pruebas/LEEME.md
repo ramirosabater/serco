@@ -31,7 +31,7 @@ En `C:\Apps\sgrp2\pruebas`:
 npm.cmd run probar
 ```
 
-- Todo bien: termina con `15 passed`.
+- Todo bien: termina con `17 passed`.
 - Si algo falla, dice cuál prueba y por qué. Para ver la captura y el paso a paso: `npm.cmd run informe`.
 - Para mirar cómo trabaja el navegador: `npm.cmd run ver`.
 

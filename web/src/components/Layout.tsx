@@ -105,12 +105,12 @@ export default function Layout() {
           {perfil?.rol !== 'cliente' && <NavLink to="/vista-cliente" className="vista-cliente" title="Lo que ve un generador en su portal">Vista del cliente</NavLink>}
         </nav>
         <div className="usuario">
-          <Ayuda />
           <span>{perfil?.nombre}</span>
           <button onClick={salir}>Salir</button>
         </div>
       </header>
       <main><Outlet /></main>
+      <Ayuda />
     </>
   )
 }

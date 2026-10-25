@@ -4,7 +4,13 @@ import fs from 'node:fs'
 // Entra una vez con el usuario de prueba y guarda la sesión para el resto de las pruebas
 setup('entrar al sistema', async ({ page }) => {
   fs.mkdirSync('.sesion', { recursive: true })
-  await page.goto('/')
+  try {
+    await page.goto('/')
+  } catch (e) {
+    if (String(e).includes('ERR_CONNECTION_REFUSED') && (process.env.BASE_URL ?? '').includes('localhost'))
+      throw new Error('No está andando el sistema en tu PC. Abrí otra ventana, entrá a C:\\Apps\\sgrp2\\web, corré "npm.cmd run dev", dejala abierta y volvé a probar.')
+    throw e
+  }
   // Netlify con "sitio privado" (protección del equipo) no deja entrar a un navegador automático
   if (await page.getByText('This site is private').isVisible({ timeout: 5_000 }).catch(() => false)) {
     throw new Error('El sitio de Netlify está en modo privado: las pruebas no pueden pasar esa pantalla. '
