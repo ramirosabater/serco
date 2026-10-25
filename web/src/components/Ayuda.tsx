@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
-import { areaDe, CIRCUITOS, NOMBRE_AREA, type Circuito } from '../lib/guias'
+import { areaDe, CIRCUITOS, NOMBRE_AREA, type Circuito, type Paso } from '../lib/guias'
 import Tito from './Tito'
 
-// Tito, el ayudante: botón flotante abajo a la derecha, circuitos guiados por área, voz.
-// Nunca guarda, borra ni envía nada: solo navega (pantallas y pestañas), resalta y explica.
+// Tito, el ayudante: botón flotante abajo a la derecha, circuitos guiados por área, voz y sugerencias.
+// Nunca guarda, borra ni envía datos por su cuenta: solo navega (pantallas y pestañas), resalta, explica
+// y propone. Lo único que guarda es su propia memoria (qué sugerencias pospuso o no quiere ver cada usuario).
 
 const normal = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const sinAnimacion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -99,6 +100,11 @@ async function resolverIr(ir: string): Promise<string | null> {
     const id = data?.[0]?.id
     return id ? `/manifiestos/${id}${resto ? `/${resto}` : ''}` : null
   }
+  if (atajo === 'chofer') {
+    const { data } = await supabase.from('alertas_vencimiento').select('id').eq('tipo', 'chofer')
+      .in('estado', ['por_vencer', 'vencido']).order('vto', { ascending: false }).limit(1)
+    return data?.[0] ? `/altas/choferes/${data[0].id}` : null
+  }
   if (atajo === 'vencimiento') {
     const { data } = await supabase.from('alertas_vencimiento').select('tipo, id').in('tipo', ['camion', 'chofer'])
       .in('estado', ['por_vencer', 'vencido']).order('vto').limit(1)
@@ -108,9 +114,43 @@ async function resolverIr(ir: string): Promise<string | null> {
   return null
 }
 
+// ------------------------------------------------------------------ sugerencias
+/** Una sugerencia de Tito. Las reglas están en la base (sugerencias_ayudante / sugerencias_manifiesto); las pantallas pueden sumar las suyas. */
+export interface Sugerencia {
+  /** Lo que se recuerda con "No me lo preguntes más" */
+  tema: string
+  /** Para no repetirla el mismo día en la misma pantalla (por defecto, el tema) */
+  clave?: string
+  titulo?: string | null
+  texto: string
+  boton?: string | null
+  ir?: string | null
+  foco?: string | null
+  /** Lo que hace el botón (por ejemplo, completar un formulario). El usuario después revisa y guarda. */
+  accion?: () => void
+  /** "Ahora no": hasta mañana (por defecto) o solo cerrar */
+  posponer?: 'manana' | 'nada'
+  prioridad?: number
+}
+type Memoria = Record<string, { estado: 'nunca' | 'pospuesta' | 'aceptada'; hasta: string | null }>
+
+const hoyLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const manana = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(5, 0, 0, 0); return d.toISOString() }
+const leerJson = <T,>(k: string, def: T): T => { try { return JSON.parse(leer(k, '')) as T } catch { return def } }
+function vistasHoy(): string[] { const v = leerJson<{ dia: string; claves: string[] }>('ayuda-vistas', { dia: '', claves: [] }); return v.dia === hoyLocal() ? v.claves : [] }
+function marcarVista(c: string) { const l = vistasHoy(); if (!l.includes(c)) guardar('ayuda-vistas', JSON.stringify({ dia: hoyLocal(), claves: [...l, c].slice(-200) })) }
+const permitida = (m: Memoria, tema: string) => { const x = m[tema]; return !x || (x.estado !== 'nunca' && !(x.hasta && Date.parse(x.hasta) > Date.now())) }
+
 declare global {
   interface Window {
-    AyudaApp?: { abrir: (id?: string) => void; hablar: (texto: string, fin?: () => void) => void; callar: () => void; circuitos: Circuito[] }
+    AyudaApp?: {
+      abrir: (id?: string) => void; hablar: (texto: string, fin?: () => void) => void; callar: () => void; circuitos: Circuito[]
+      /** Propone algo. Devuelve false si el usuario pidió no verlo más o ya lo pospuso. */
+      sugerir: (s: Sugerencia) => boolean
+      quitarSugerencia: (clave: string) => void
+      /** Explica algo de la pantalla (un número, un gráfico): uno o varios pasos con lo que hay que mirar resaltado */
+      explicar: (titulo: string, pasos: Paso[], seguido?: boolean) => void
+    }
   }
 }
 
@@ -136,6 +176,15 @@ export default function Ayuda() {
   const [suelto, setSuelto] = useState<string | null>(null)   // lo que dice por AyudaApp.hablar
   const finSuelto = useRef<(() => void) | null>(null)
   const yo = useRef<SVGSVGElement>(null)
+  // Sugerencias: las de la base para esta pantalla, las que suman las pantallas y la que se está mostrando
+  const [memoria, setMemoria] = useState<Memoria>(() => leerJson<Memoria>('ayuda-memoria', {}))
+  const [deLaBase, setDeLaBase] = useState<Sugerencia[]>([])
+  const [externas, setExternas] = useState<Sugerencia[]>([])
+  const [actual, setActual] = useState<Sugerencia | null>(null)
+  const [leerSug, setLeerSug] = useState(false)
+  const [pausa, setPausa] = useState(false)     // después de cerrar una, las demás esperan a que lo toquen
+  const [conSug, setConSug] = useState(() => leer('ayuda-sugerencias', 'si') === 'si')
+  const [memoriaLista, setMemoriaLista] = useState(false)   // hasta saber qué no quiere ver, no se muestra nada
 
   const mios = useMemo(() => CIRCUITOS.filter((c) => perfil && c.roles.includes(perfil.rol)), [perfil])
   const p = circuito?.pasos[paso]
@@ -148,6 +197,44 @@ export default function Ayuda() {
     const t = window.setInterval(() => setHayModal(!!document.querySelector('.modal-fondo, [aria-modal="true"]')), 500)
     return () => window.clearInterval(t)
   }, [])
+
+  // ---------------- memoria del ayudante: en la base (sigue al usuario en cualquier compu) y una copia en el navegador
+  useEffect(() => {
+    if (!perfil || perfil.rol === 'cliente') return
+    supabase.from('ayudante_memoria').select('tema, estado, hasta').then(({ data, error }) => {
+      setMemoriaLista(true)
+      if (error || !data) return    // sin la tabla (base sin actualizar): queda la copia del navegador
+      const m: Memoria = Object.fromEntries(data.map((x) => [x.tema, { estado: x.estado, hasta: x.hasta }]))
+      const t = { ...memRef.current, ...m }; memRef.current = t; guardar('ayuda-memoria', JSON.stringify(t)); setMemoria(t)
+    })
+  }, [perfil])
+  // Copias al día para AyudaApp.sugerir (que lo pueden llamar en cualquier momento)
+  const memRef = useRef(memoria); memRef.current = memoria
+  const areaRef = useRef(area); areaRef.current = area
+  const conSugRef = useRef(conSug); conSugRef.current = conSug
+  const recordar = useCallback((tema: string, estado: 'nunca' | 'pospuesta' | 'aceptada', hasta: string | null) => {
+    const t = { ...memRef.current, [tema]: { estado, hasta } }
+    memRef.current = t; guardar('ayuda-memoria', JSON.stringify(t)); setMemoria(t)
+    supabase.from('ayudante_memoria').upsert({ tema, estado, hasta, actualizado: new Date().toISOString() }, { onConflict: 'usuario,tema' }).then(() => { /* si falla, queda la copia local */ })
+  }, [])
+
+  // ---------------- las sugerencias de la base para esta pantalla (un poco después de llegar)
+  useEffect(() => {
+    setDeLaBase([]); setActual(null); setLeerSug(false); setPausa(false)
+    if (!perfil || perfil.rol === 'cliente' || !conSug) return
+    let vivo = true
+    const t = window.setTimeout(async () => {
+      const idManifiesto = pathname.match(/^\/manifiestos\/(\d+)$/)?.[1]
+      const [a, b] = await Promise.all([
+        supabase.rpc('sugerencias_ayudante', { p_area: area }),
+        idManifiesto ? supabase.rpc('sugerencias_manifiesto', { p_id: Number(idManifiesto) }) : Promise.resolve({ data: [] }),
+      ])
+      if (!vivo) return
+      setDeLaBase([...((b.data ?? []) as Sugerencia[]), ...((a.data ?? []) as Sugerencia[])])
+    }, 1200)
+    return () => { vivo = false; window.clearTimeout(t) }
+  }, [pathname, area, perfil, conSug])
+  useEffect(() => { setExternas([]) }, [pathname])
 
   const terminar = useCallback(() => { setCircuito(null); setPaso(0); setRect(null); setAuto(false); setFestejo(false); setNoEsta(false) }, [])
   const ir = useCallback((i: number, manual = true) => { if (manual) setAuto(false); setFestejo(false); setPaso(i) }, [])
@@ -193,7 +280,7 @@ export default function Ayuda() {
 
   // ---------------- qué dice
   const texto = festejo ? '¡Listo! Eso es todo. Cuando quieras, tocame y seguimos.'
-    : suelto ?? (p ? (noEsta && p.foco ? `${p.falta ?? SIN_PERMISO}` : p.texto) : '')
+    : suelto ?? (p ? (noEsta && p.foco ? `${p.falta ?? SIN_PERMISO}` : p.texto) : leerSug && actual ? actual.texto : '')
   const conVoz = voz && hayVoz && !!texto && !buscando
   const { hablando, termino, dicho, callar } = useVoz(conVoz ? texto : '', conVoz, lenta)
   const { mostrado, listo, completar } = useEscritura(buscando ? '' : texto, conVoz ? (lenta ? 80 : 62) : 30)
@@ -221,17 +308,6 @@ export default function Ayuda() {
     return () => window.cancelAnimationFrame(id)
   }, [rect])
 
-  // ---------------- Esc: primero calla, después cierra
-  useEffect(() => {
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (hablando) { callar(); setAuto(false); return }
-      if (circuito) terminar(); else setAbierto(false)
-    }
-    document.addEventListener('keydown', tecla)
-    return () => document.removeEventListener('keydown', tecla)
-  }, [hablando, callar, circuito, terminar])
-
   // Al cambiar de pantalla por cuenta propia (no por el circuito), se calla
   const ultimaRuta = useRef(pathname)
   useEffect(() => { if (ultimaRuta.current !== pathname && !circuito) callar(); ultimaRuta.current = pathname }, [pathname, circuito, callar])
@@ -245,9 +321,58 @@ export default function Ayuda() {
       hablar: (t, fin) => { finSuelto.current = fin ?? null; setSuelto(t) },
       callar: () => { callar(); setSuelto(null) },
       circuitos: CIRCUITOS,
+      sugerir: (sg) => {
+        if (!conSugRef.current || !permitida(memRef.current, sg.tema) || vistasHoy().includes(`${areaRef.current}|${sg.clave ?? sg.tema}`)) return false
+        setExternas((l) => [...l.filter((x) => (x.clave ?? x.tema) !== (sg.clave ?? sg.tema)), sg])
+        return true
+      },
+      explicar: (titulo, pasos, seguido) => {
+        if (!pasos.length) return
+        setActual(null); setAbierto(false)
+        empezar({ id: `explica-${Date.now()}`, titulo, area: areaRef.current, roles: [], pasos })
+        if (!seguido || pasos.length === 1) setAuto(false)
+      },
+      quitarSugerencia: (clave) => {
+        setExternas((l) => l.filter((x) => (x.clave ?? x.tema) !== clave))
+        setActual((a) => (a && (a.clave ?? a.tema) === clave ? null : a))
+      },
     }
     return () => { delete window.AyudaApp }
   }, [mios, empezar, callar])
+
+  // ---------------- cuál sugerencia se muestra: de a una, nunca durante un circuito, y cada una una sola vez por día en cada pantalla
+  const pendientes = useMemo(() => {
+    const vistas = vistasHoy()
+    return [...externas, ...deLaBase].filter((x) => x !== actual && permitida(memoria, x.tema) && !vistas.includes(`${area}|${x.clave ?? x.tema}`))
+      .sort((a, b) => (a.prioridad ?? 5) - (b.prioridad ?? 5))
+  }, [externas, deLaBase, memoria, area, actual])
+  const mostrarSug = useCallback((x: Sugerencia) => { marcarVista(`${area}|${x.clave ?? x.tema}`); setActual(x) }, [area])
+  useEffect(() => {
+    if (!memoriaLista || actual || pausa || circuito || abierto || suelto || !pendientes.length) return
+    mostrarSug(pendientes[0])
+  }, [memoriaLista, actual, pausa, circuito, abierto, suelto, pendientes, mostrarSug])
+
+  const cerrarSug = useCallback(() => { setActual(null); setLeerSug(false); setPausa(true); callar() }, [callar])
+  const aceptarSug = useCallback((sg: Sugerencia) => {
+    cerrarSug()
+    if (sg.posponer !== 'nada') recordar(sg.tema, 'aceptada', manana())
+    if (sg.accion) { sg.accion(); return }
+    if (sg.foco) {
+      empezar({ id: `sug-${sg.tema}`, titulo: sg.titulo ?? 'Sugerencia', area, roles: [perfil!.rol], pasos: [{ texto: 'Acá está.', ir: sg.ir ?? undefined, foco: sg.foco }] })
+      setAuto(false)
+    } else if (sg.ir) nav(sg.ir)
+  }, [cerrarSug, recordar, empezar, area, perfil, nav])
+
+  // ---------------- Esc: primero calla, después cierra
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (hablando) { callar(); setAuto(false); return }
+      if (circuito) terminar(); else if (actual) cerrarSug(); else setAbierto(false)
+    }
+    document.addEventListener('keydown', tecla)
+    return () => document.removeEventListener('keydown', tecla)
+  }, [hablando, callar, circuito, terminar, actual, cerrarSug])
 
   const lista = useMemo(() => {
     const t = normal(q.trim())
@@ -262,9 +387,11 @@ export default function Ayuda() {
   // Si lo resaltado cae abajo a la derecha, Tito se pasa a la izquierda para no taparlo
   const izquierda = !!rect && rect.right > window.innerWidth - 460 && rect.bottom > window.innerHeight - 320
   const enCircuito = !!circuito && !!p
-  const globo = abierto || enCircuito || !!suelto
+  const sug = !enCircuito && !abierto && !suelto ? actual : null
+  const globo = abierto || enCircuito || !!suelto || !!sug
 
   function alternarVoz() { const v = !voz; setVoz(v); guardar('ayuda-voz', v ? 'si' : 'no'); if (!v) callar() }
+  function alternarSug() { const v = !conSug; setConSug(v); guardar('ayuda-sugerencias', v ? 'si' : 'no'); if (!v) { setActual(null); setExternas([]); setDeLaBase([]) } }
   function alternarLenta() { const v = !lenta; setLenta(v); guardar('ayuda-lenta', v ? 'si' : 'no') }
 
   return (
@@ -273,10 +400,10 @@ export default function Ayuda() {
 
       <div className={`bt-ayudante${izquierda ? ' izq' : ''}${hayModal && !globo ? ' chico' : ''}${globo ? ' con-globo' : ''}`} data-area={area}>
         {globo && (
-          <div className="bt-globo" role="dialog" aria-label={enCircuito ? `Ayuda: ${circuito!.titulo}` : 'Ayuda'}>
+          <div className="bt-globo" role="dialog" aria-label={enCircuito ? `Ayuda: ${circuito!.titulo}` : sug ? 'Sugerencia de Tito' : 'Ayuda'}>
             {enCircuito ? <>
-              <div className="bt-meta"><span>{circuito!.titulo}</span><span>{paso + 1} de {circuito!.pasos.length}</span></div>
-              <div className="bt-progreso" aria-hidden="true"><span style={{ width: `${((paso + 1) / circuito!.pasos.length) * 100}%` }} /></div>
+              <div className="bt-meta"><span>{circuito!.titulo}</span>{circuito!.pasos.length > 1 && <span>{paso + 1} de {circuito!.pasos.length}</span>}</div>
+              {circuito!.pasos.length > 1 && <div className="bt-progreso" aria-hidden="true"><span style={{ width: `${((paso + 1) / circuito!.pasos.length) * 100}%` }} /></div>}
               {!festejo && p!.titulo && <h3>{p!.titulo}</h3>}
               <p className="bt-texto" onClick={completar}>
                 {buscando ? <span className="muted">Un segundo, ya te muestro…</span> : mostrado}
@@ -284,6 +411,9 @@ export default function Ayuda() {
               </p>
               <span className="sr-only" aria-live="polite">{buscando ? '' : texto}</span>
               {!festejo && <>
+                {p!.boton && <div className="bt-botones" style={{ marginTop: 0 }}>
+                  <button className="link" onClick={() => { const destino = p!.boton!.ir; terminar(); nav(destino) }}>{p!.boton.texto} →</button>
+                </div>}
                 <div className="bt-botones">
                   <button onClick={() => ir(paso - 1)} disabled={paso === 0} aria-label="Paso anterior">‹ Anterior</button>
                   {paso + 1 < circuito!.pasos.length
@@ -301,11 +431,30 @@ export default function Ayuda() {
               </>}
             </> : suelto ? (
               <p className="bt-texto">{mostrado}</p>
+            ) : sug ? (
+              <div className="bt-sug" data-tema={sug.tema}>
+                <div className="bt-cab">
+                  <h3>{sug.titulo ?? 'Una sugerencia'}</h3>
+                  <button className="link" onClick={cerrarSug} aria-label="Cerrar la sugerencia">✕</button>
+                </div>
+                <p className="bt-texto">{sug.texto}</p>
+                <div className="bt-botones">
+                  <button onClick={() => { if (sug.posponer !== 'nada') recordar(sug.tema, 'pospuesta', manana()); cerrarSug() }}>Ahora no</button>
+                  {(sug.boton || sug.accion || sug.ir || sug.foco) && <button className="pri" onClick={() => aceptarSug(sug)}>{sug.boton ?? 'Dale'}</button>}
+                </div>
+                <div className="bt-no">
+                  {hayVoz && <button className="link" onClick={() => { if (leerSug) { setLeerSug(false); callar() } else setLeerSug(true) }}>{leerSug && hablando ? '⏹ Callar' : '🔊 Escuchar'}</button>}
+                  <button className="link" onClick={() => { recordar(sug.tema, 'nunca', null); cerrarSug() }}>No me lo preguntes más</button>
+                </div>
+              </div>
             ) : <>
               <div className="bt-cab">
                 <b>¡Hola! Soy Tito.</b>
                 <button className="link" onClick={() => setAbierto(false)} aria-label="Cerrar">✕</button>
               </div>
+              {pendientes.length > 0 && <section className="bt-lista" style={{ marginBottom: 8 }}><h4>{pendientes.length === 1 ? 'Tengo una sugerencia' : `Tengo ${pendientes.length} sugerencias`}</h4>
+                {pendientes.map((x) => <button key={x.clave ?? x.tema} className="bt-circuito" onClick={() => { setAbierto(false); mostrarSug(x) }}><b>{x.titulo ?? 'Sugerencia'}</b><span>Ver</span></button>)}
+              </section>}
               <p className="small" style={{ margin: '2px 0 8px' }}>Elegí qué querés aprender y te lo voy mostrando en la pantalla.</p>
               <input type="search" placeholder="Buscar: imprimir, certificado, vencimiento…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar en la ayuda" autoFocus />
               <div className="bt-lista">
@@ -317,14 +466,18 @@ export default function Ayuda() {
                 </section>}
                 {!lista.aca.length && !lista.otros.length && <p className="muted small">No encontré nada con esa palabra.</p>}
               </div>
+              <div className="bt-no">
+                <button className="link" onClick={alternarSug} aria-pressed={conSug}>{conSug ? '💡 Sugerencias: sí' : '💡 Sugerencias: no'}</button>
+              </div>
             </>}
           </div>)}
 
         <button className="bt-boton" onClick={() => { if (enCircuito) return; setAbierto(!abierto) }} aria-label="Ayuda" aria-expanded={globo}
           title={enCircuito ? undefined : 'Ayuda'}>
           <Tito ref={yo} traje={area} angulo={enCircuito && !festejo ? angulo : null} hablando={hablando || (!listo && !buscando && globo)}
-            festejo={festejo} saluda={abierto && !enCircuito} tamano={hayModal && !globo ? 58 : 92} />
+            festejo={festejo} saluda={(abierto && !enCircuito) || !!sug} tamano={hayModal && !globo ? 58 : 92} />
           {!globo && <span className="bt-etiqueta">Ayuda</span>}
+          {!globo && memoriaLista && pendientes.length > 0 && <span className="bt-aviso" title={`${pendientes.length} sugerencias`} aria-label={`${pendientes.length} sugerencias`}>{pendientes.length}</span>}
         </button>
       </div>
     </>

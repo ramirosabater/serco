@@ -80,7 +80,8 @@ export const ENTIDADES: Entidad[] = [
     ayuda: 'Con el carnet, la licencia de carga peligrosa o el psicofísico vencidos, el chofer no puede salir con un manifiesto.',
     select: '*, transportistas(nombre)', columnas: [{ k: 'transportistas', label: 'Transportista', ref: 'nombre' }],
     campos: [{ k: 'nombre', label: 'Apellido y nombre', tipo: 'texto', req: true, ancho: 'doble' }, transportista,
-      { k: 'dni', label: 'DNI', tipo: 'texto', ayuda: 'Se usa para consultar y controlar sus certificados.' }],
+      { k: 'dni', label: 'DNI', tipo: 'texto', ayuda: 'Se usa para consultar y controlar sus certificados.' },
+      { k: 'email', label: 'Mail', tipo: 'email', ayuda: 'Para pedirle los certificados nuevos. Si no tiene, el pedido va al mail del transportista.' }],
     documentos: [
       { label: 'Carnet de conducir', nro: 'carnet_nro', vto: 'carnet_vto', archivo: 'carnet_archivo' },
       { label: 'Carga peligrosa (Seguridad Vial)', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo', lector: 'mmpp',

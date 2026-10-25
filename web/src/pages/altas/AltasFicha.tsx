@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { supabase, mensajeError } from '../../lib/supabase'
+import { supabase, mensajeError, invocar } from '../../lib/supabase'
 import { entidad, estadoVto, ETIQUETA_ESTADO, type Campo, type Documento, type Entidad } from '../../lib/altas'
 import { cuitValido, soloDigitos } from '../../lib/cuit'
 import { fd } from '../../lib/formato'
@@ -10,6 +10,8 @@ import { MenuAltas } from './AltasLista'
 import CorrientesHabilitadas from '../../components/CorrientesHabilitadas'
 import DireccionesRetiro from '../../components/DireccionesRetiro'
 import ResumenGenerador from '../../components/ResumenGenerador'
+
+interface UltimoPedido { documento: string; estado: string; enviado: string | null; enviado_a: string | null; subido: string | null; creado: string }
 
 type Valores = Record<string, unknown>
 
@@ -59,8 +61,10 @@ function CampoInput({ c, v, set, refs, soloLectura }: { c: Campo; v: unknown; se
   )
 }
 
-function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGuardado }: {
+function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGuardado, pedido, pedir }: {
   d: Documento; valores: Valores; set: (k: string, v: unknown) => void; tabla: string; id: number | null; soloLectura: boolean; onError: (s: string) => void
+  /** Choferes: el último pedido por mail de este documento y cómo pedirlo */
+  pedido?: UltimoPedido; pedir?: () => Promise<string | null>
   /** Lo que ya quedó grabado en la base al subir el archivo (no queda como "cambio sin guardar") */
   onGuardado: (cambios: Valores) => void
 }) {
@@ -70,6 +74,7 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
   const est = estadoVto(vto)
 
   const [lectura, setLectura] = useState<{ ok: boolean; t: string } | null>(null)
+  const [pidiendo, setPidiendo] = useState(false)
   const dniFicha = String(valores.dni ?? valores.carnet_nro ?? '').replace(/\D/g, '')
 
   async function subir(f: File) {
@@ -144,11 +149,30 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
           {!archivo && soloLectura && <span className="muted">Sin archivo</span>}
         </>}
         {subiendo && d.lector && <div className="muted small">Leyendo el certificado…</div>}
+        {pedir && <div className="small" data-ayuda="ficha-pedir">
+          {pedido && <span className="muted pedido-estado">{estadoPedido(pedido)}</span>}
+          {!soloLectura && <button type="button" className="link" disabled={pidiendo}
+            onClick={async () => { setPidiendo(true); const r = await pedir(); setPidiendo(false); setLectura(r ? { ok: false, t: r } : { ok: true, t: 'Listo: le mandamos el mail con el enlace para subir el certificado.' }) }}>
+            {pidiendo ? 'Enviando…' : pedido && ['pendiente', 'enviado', 'sin_mail'].includes(pedido.estado) ? 'Volver a pedir por mail' : 'Pedir por mail'}</button>}
+        </div>}
       </td>
     </tr>
     {lectura && <tr className="lectura"><td colSpan={5}><div className={`aviso ${lectura.ok ? 'ok' : 'haz'} small`}>{lectura.t}</div></td></tr>}
     </>
   )
+}
+
+function estadoPedido(p: UltimoPedido) {
+  const f = (s: string | null) => fd(s?.slice(0, 10))
+  switch (p.estado) {
+    case 'enviado': return `Pedido por mail el ${f(p.enviado)}${p.enviado_a ? ` a ${p.enviado_a}` : ''}`
+    case 'subido': return `Lo subió el ${f(p.subido)}: revisalo en Vencimientos`
+    case 'aceptado': return `Subido por mail y aceptado`
+    case 'rechazado': return 'El último que subió se rechazó'
+    case 'sin_mail': return 'No se pudo pedir: falta el mail'
+    case 'pendiente': return 'No salió el mail del pedido'
+    default: return ''
+  }
 }
 
 export default function AltasFicha() {
@@ -184,6 +208,25 @@ export default function AltasFicha() {
       })
     })
   }, [e])
+
+  // Choferes: el último pedido de certificado por mail de cada documento
+  const [pedidos, setPedidos] = useState<Record<string, UltimoPedido>>({})
+  const cargarPedidos = useCallback(() => {
+    if (e.tabla !== 'choferes' || !id) return
+    supabase.from('pedidos_documento').select('documento, estado, enviado, enviado_a, subido, creado').eq('chofer_id', id).neq('estado', 'cancelado')
+      .order('creado', { ascending: false }).then(({ data }) => {
+        const ult: Record<string, UltimoPedido> = {}
+        for (const p of (data ?? []) as UltimoPedido[]) ult[p.documento] ??= p
+        setPedidos(ult)
+      })
+  }, [e.tabla, id])
+  useEffect(() => { cargarPedidos() }, [cargarPedidos])
+  async function pedirPorMail(documento: string): Promise<string | null> {
+    if (valores.email !== original.email) return 'Guardá primero el mail del chofer.'
+    const { error } = await invocar('certificado-chofer', { accion: 'pedir', chofer_id: id, documento })
+    cargarPedidos()
+    return error
+  }
 
   const set = (k: string, v: unknown) => { setOk(''); setValores((x) => ({ ...x, [k]: v })) }
   const cambios = Object.fromEntries(Object.entries(valores).filter(([k, v]) => v !== original[k]))
@@ -240,7 +283,8 @@ export default function AltasFicha() {
           <div className="tw"><table>
             <thead><tr><th>Documento</th><th>Número</th><th>Vence</th><th>Estado</th><th>Escaneo</th></tr></thead>
             <tbody>{e.documentos.map((d) => <FilaDocumento key={d.vto} d={d} valores={valores} set={set} tabla={e.tabla} id={id} soloLectura={soloLectura} onError={setError}
-              onGuardado={(c) => { setOriginal((o) => ({ ...o, ...c })); setValores((v) => ({ ...v, ...c })) }} />)}</tbody>
+              onGuardado={(c) => { setOriginal((o) => ({ ...o, ...c })); setValores((v) => ({ ...v, ...c })) }}
+              {...(e.tabla === 'choferes' && id ? { pedido: pedidos[d.vto.replace(/_vto$/, '')], pedir: () => pedirPorMail(d.vto.replace(/_vto$/, '')) } : {})} />)}</tbody>
           </table></div>
         </div>)}
 

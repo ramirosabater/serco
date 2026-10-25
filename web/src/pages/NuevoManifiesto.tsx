@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
@@ -49,7 +49,11 @@ export default function NuevoManifiesto() {
   const [instr, setInstr] = useState<Instrucciones>(() => instruccionesPorDefecto({}))
   const [imprimir, setImprimir] = useState(false)
 
+  // "Como siempre": chofer y camión a aplicar cuando termine de cambiar el transportista
+  const aplicar = useRef<{ t: string; chofer?: string; camion?: string } | null>(null)
+  const transpRef = useRef('')
   const generador = useMemo(() => generadores.find((g) => g.nombre === genTexto) ?? null, [generadores, genTexto])
+  transpRef.current = transportista
   const transp = transportistas.find((t) => String(t.id) === transportista)
   const esAzul = !!transp?.emite_manifiestos
 
@@ -63,7 +67,13 @@ export default function NuevoManifiesto() {
         if (serco) setTransportista((t) => t || String(serco.id))   // si ya eligieron otro mientras cargaba, no se pisa
       })
     traerTodo<Gen>(() => supabase.from('generadores').select('id, nombre, cuit, generador_principal_id, hab_mun_vto, actividad').eq('activo', true).order('nombre'))
-      .then(({ data }) => setGeneradores(data))
+      .then(({ data }) => {
+        setGeneradores(data)
+        // Desde una sugerencia de Tito: /manifiestos/nuevo?generador=123
+        const pedido = Number(new URLSearchParams(window.location.search).get('generador'))
+        const g = pedido ? data.find((x) => x.id === pedido) : null
+        if (g) setGenTexto((t) => t || g.nombre)
+      })
     supabase.from('generadores_principales').select('id, nombre').eq('activo', true).order('nombre')
       .then(({ data }) => setPlantas(data ?? []))
     supabase.from('parametros').select('clave, valor').like('clave', 'form_%')
@@ -79,7 +89,9 @@ export default function NuevoManifiesto() {
       .then(({ data }) => setChoferes((data ?? []).map((c) => ({ id: c.id, nombre: c.nombre, activo: c.activo, vtos: [c.carnet_vto, c.carga_pel_vto, c.sep_vto] }))))
     supabase.from('camiones').select('id, patente, activo, vtv_vto, carga_pel_vto, ruta_vto').eq('transportista_id', t).order('activo', { ascending: false }).order('patente')
       .then(({ data }) => setCamiones((data ?? []).map((c) => ({ id: c.id, nombre: c.patente, activo: c.activo, vtos: [c.vtv_vto, c.carga_pel_vto, c.ruta_vto] }))))
-    setChofer(''); setCamion('')
+    const pend = aplicar.current
+    if (pend && pend.t === transportista) { setChofer(pend.chofer ?? ''); setCamion(pend.camion ?? ''); aplicar.current = null }
+    else { setChofer(''); setCamion('') }
   }, [transportista])
 
   // Al elegir generador: su planta y sus direcciones de retiro
@@ -88,6 +100,32 @@ export default function NuevoManifiesto() {
     if (generador.generador_principal_id) setPlanta(String(generador.generador_principal_id))
     supabase.from('generador_direcciones').select('direccion').eq('generador_id', generador.id).order('direccion')
       .then(({ data }) => { const l = (data ?? []).map((d) => d.direccion as string); setDirecciones(l); setDireccion(l[0] ?? '') })
+  }, [generador])
+
+  // Tito propone lo de siempre de este generador (dirección, transportista, chofer y camión); el usuario decide
+  useEffect(() => {
+    if (!generador) return
+    const clave = `como-siempre:${generador.id}`
+    let vivo = true
+    supabase.rpc('como_siempre', { p_generador: generador.id }).then(({ data }) => {
+      const cs = data as { retiros: number; direccion?: string; transportista_id?: number; chofer_id?: number; chofer?: string; camion_id?: number; patente?: string } | null
+      if (!vivo || !cs || !window.AyudaApp) return
+      const partes = [cs.direccion && `dirección ${cs.direccion}`, cs.chofer && `chofer ${cs.chofer}`, cs.patente && `camión ${cs.patente}`].filter(Boolean)
+      if (!partes.length) return
+      window.AyudaApp.sugerir({
+        tema: 'como-siempre', clave, titulo: 'Como siempre', posponer: 'nada', prioridad: 0, boton: 'Completar',
+        texto: `En la mayoría de los ${cs.retiros} retiros de los últimos 6 meses de ${generador.nombre} fue: ${partes.join(', ')}. ¿Lo completo? Después revisalo antes de emitir.`,
+        accion: () => {
+          if (cs.direccion) setDireccion(cs.direccion)
+          const t = cs.transportista_id ? String(cs.transportista_id) : ''
+          const ch = cs.chofer ? String(cs.chofer_id) : undefined, ca = cs.patente ? String(cs.camion_id) : undefined
+          if (t && t !== transpRef.current) { aplicar.current = { t, chofer: ch, camion: ca }; setTransportista(t) }
+          else { if (ch) setChofer(ch); if (ca) setCamion(ca) }
+        },
+      })
+    })
+    return () => { vivo = false; window.AyudaApp?.quitarSugerencia(clave) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generador])
 
   // Validación en vivo con la misma regla que aplica la base al emitir

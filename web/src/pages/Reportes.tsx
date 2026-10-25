@@ -5,6 +5,8 @@ import { traerTodo } from '../lib/paginar'
 import { exportarExcel, type Columna } from '../lib/excel'
 import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { UM } from '../lib/tipos'
+import Explica, { ExplicarTodo } from '../components/Explica'
+import type { Paso } from '../lib/guias'
 
 const REPORTES: Record<string, [string, string]> = {
   producto: ['Cantidad por producto', 'Kilos y litros por corriente, por semana, quincena o mes.'],
@@ -12,6 +14,15 @@ const REPORTES: Record<string, [string, string]> = {
   nacional: ['Libro nacional', 'Manifiestos Nación con sus residuos y certificados.'],
   transporte: ['Libro de transporte', 'Retiros hechos por cada transportista.'],
   estadisticas: ['Estadísticas', 'Corrientes, generadores y destinos con más volumen.'],
+}
+
+/** Qué explica Tito de cada reporte (el "?" junto al título) */
+const QUE_ES: Record<string, string> = {
+  producto: 'Suma lo retirado de cada corriente, por semana, quincena o mes, según la fecha del retiro. Se elige la unidad (kilos, litros o metros cúbicos) y se puede filtrar por planta o transportista. Los manifiestos anulados no cuentan. Se exporta a Excel y, si está configurado, llega por mail cada lunes.',
+  provincial: 'Es el libro de movimientos de cada planta: un renglón por residuo, con generador, corriente, cantidad y en qué quedó. Se elige la planta y el período, y se imprime para rubricar o se exporta a Excel.',
+  nacional: 'Lista los Manifiestos Nación del período, es decir, los viajes al operador de disposición final, con los residuos que llevó cada uno y su certificado cuando ya volvió.',
+  transporte: 'Es el libro de cada transportista: todos los retiros que hizo en el período, con el camión, el chofer y lo que llevó.',
+  estadisticas: 'Resume el período: cuántos manifiestos y generadores, cuánto se retiró, cómo se reparte entre sólidos, líquidos y barros, y quiénes concentran más volumen.',
 }
 
 const inicioMes = () => hoy().slice(0, 8) + '01'
@@ -239,11 +250,19 @@ interface Est { manifiestos: number; generadores: number; residuos: number; tota
   corrientes: Rank[]; generadores_top: Rank[]; destinos: Rank[]; plantas?: Rank[]; estado_fisico?: Rank[]; por_mes: { mes: string; kgs: number | null; lts: number | null }[] }
 
 /** Ranking con barras horizontales: una sola serie, un solo color, el valor escrito al lado */
-function Ranking({ titulo, l }: { titulo: string; l: Rank[] }) {
+const cant = (x: Rank) => (x.um === 'KGS' ? `${num(Math.round(x.total / 1000))} toneladas` : `${num(Math.round(x.total))} ${umL(x.um)}`)
+function explicaRanking(titulo: string, l: Rank[], foco: string): Paso | null {
+  if (!l.length) return null
+  const u = l[0].um, mismos = l.filter((x) => x.um === u), tot = mismos.reduce((a, x) => a + x.total, 0) || 1
+  const top3 = mismos.slice(0, 3), pc3 = Math.round((top3.reduce((a, x) => a + x.total, 0) / tot) * 100)
+  return { titulo, foco, texto: `Ordenado de mayor a menor. Primero está ${l[0].nombre}, con ${cant(l[0])}. Entre los tres primeros (${top3.map((x) => x.nombre).join(', ')}) suman el ${pc3} % de lo que muestra esta lista. Cada barra es proporcional al primero.` }
+}
+
+function Ranking({ titulo, l, ayuda }: { titulo: string; l: Rank[]; ayuda: string }) {
   const max = Math.max(1, ...l.map((x) => x.total))
   return (
-    <div className="card">
-      <h2>{titulo}</h2>
+    <div className="card" data-ayuda={ayuda}>
+      <h2>{titulo}{l.length > 0 && <Explica titulo={titulo} paso={() => explicaRanking(titulo, l, ayuda)} />}</h2>
       {l.length === 0 ? <p className="muted">Sin datos en el período.</p> : (
         <div className="ranking">{l.map((x) => (
           <div key={x.nombre + x.um} className="rk" title={`${x.nombre}: ${num(Math.round(x.total))} ${umL(x.um)}`}>
@@ -262,8 +281,8 @@ function EstadoFisico({ l }: { l: Rank[] }) {
   const NOMBRE: Record<string, string> = { 'SÓLIDO': 'Sólidos', 'LÍQUIDO': 'Líquidos', 'SEMISÓLIDO': 'Barros (semisólidos)' }
   const unidades = [...new Set(l.map((x) => x.um))]
   return (
-    <div className="card mt">
-      <h2>Sólidos, líquidos y barros</h2>
+    <div className="card mt" data-ayuda="est-estado">
+      <h2>Sólidos, líquidos y barros<Explica titulo="Sólidos, líquidos y barros" paso={() => explicaEstado(l)} /></h2>
       {unidades.map((u) => {
         const ORDEN = ['SÓLIDO', 'LÍQUIDO', 'SEMISÓLIDO']
         const filas = l.filter((x) => x.um === u).sort((a, b) => (ORDEN.indexOf(a.nombre) + 9) % 9 - (ORDEN.indexOf(b.nombre) + 9) % 9)
@@ -282,6 +301,30 @@ function EstadoFisico({ l }: { l: Rank[] }) {
   )
 }
 
+function explicaEstado(l: Rank[]): Paso {
+  const NOMBRE: Record<string, string> = { 'SÓLIDO': 'sólidos', 'LÍQUIDO': 'líquidos', 'SEMISÓLIDO': 'barros' }
+  const kg = l.filter((x) => x.um === 'KGS'), tot = kg.reduce((a, x) => a + x.total, 0) || 1
+  const partes = [...kg].sort((a, b) => b.total - a.total).map((x) => `${NOMBRE[x.nombre] ?? x.nombre.toLowerCase()} el ${Math.round((x.total / tot) * 100)} %`)
+  return { titulo: 'Sólidos, líquidos y barros', foco: 'est-estado',
+    texto: `Reparte lo retirado según el estado físico de cada corriente${partes.length ? `. De lo que se mide en kilos: ${partes.join(', ')}` : ''}. Cuando una corriente se mide en litros, va en una barra aparte.` }
+}
+
+function pasosEstadisticas(e: Est): Paso[] {
+  const meses = e.por_mes ?? []
+  const mejor = meses.reduce<Est['por_mes'][number] | null>((a, x) => (!a || (x.kgs ?? 0) > (a.kgs ?? 0) ? x : a), null)
+  const l = [
+    { titulo: 'Los números del período', foco: 'est-kpis',
+      texto: `${num(e.manifiestos)} manifiestos de ${num(e.generadores)} generadores. Se retiraron ${num(Math.round((e.totales.KGS ?? 0) / 1000))} toneladas de sólidos y barros y ${num(Math.round(e.totales.LTS ?? 0))} litros de líquidos. No cuentan los anulados.` },
+    meses.length > 1 && mejor ? { titulo: 'Kilos por mes', foco: 'est-meses',
+      texto: `Cada barra es un mes. El de más kilos fue ${['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][+mejor.mes.slice(5, 7) - 1]} de ${mejor.mes.slice(0, 4)}, con ${num(Math.round((mejor.kgs ?? 0) / 1000))} toneladas.` } : null,
+    e.estado_fisico ? explicaEstado(e.estado_fisico) : null,
+    explicaRanking('Corrientes con más volumen', e.corrientes, 'est-corrientes'),
+    explicaRanking('Generadores con más volumen', e.generadores_top, 'est-generadores'),
+    explicaRanking('Destinos de disposición final', e.destinos, 'est-destinos'),
+  ]
+  return l.filter((x): x is Paso => !!x)
+}
+
 function Estadisticas() {
   const [d, setD] = useState(inicioAnio()), [h, setH] = useState(hoy())
   const [e, setE] = useState<Est | null>(null)
@@ -293,18 +336,18 @@ function Estadisticas() {
   const maxMes = useMemo(() => Math.max(1, ...meses.map((m) => m.kgs ?? 0)), [meses])
   return (
     <>
-      <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} />
+      <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} extra={e ? <ExplicarTodo titulo="Qué dicen las estadísticas" pasos={() => pasosEstadisticas(e)} texto="Explicame las estadísticas" /> : undefined} />
       {error && <div className="aviso bad">{error}</div>}
       {e && <>
-        <div className="grid k4">
+        <div className="grid k4" data-ayuda="est-kpis">
           <div className="card kpi"><div className="v">{num(e.manifiestos)}</div><div className="l">manifiestos</div></div>
           <div className="card kpi"><div className="v">{num(e.generadores)}</div><div className="l">generadores atendidos</div></div>
           <div className="card kpi"><div className="v">{num(Math.round((e.totales.KGS ?? 0) / 1000))} t</div><div className="l">de residuos sólidos y semisólidos</div></div>
           <div className="card kpi"><div className="v">{num(Math.round(e.totales.LTS ?? 0))}</div><div className="l">litros de residuos líquidos</div></div>
         </div>
         {meses.length > 1 && (
-          <div className="card mt">
-            <h2>Kilos retirados por mes</h2>
+          <div className="card mt" data-ayuda="est-meses">
+            <h2>Kilos retirados por mes<Explica titulo="Kilos por mes" paso={() => pasosEstadisticas(e).find((x) => x.foco === 'est-meses') ?? null} /></h2>
             <div className="meses">{meses.map((m) => (
               <div key={m.mes} className="mes" title={`${m.mes.slice(5)}/${m.mes.slice(0, 4)}: ${num(Math.round(m.kgs ?? 0))} kg`}>
                 <span className="mv">{num(Math.round((m.kgs ?? 0) / 1000))} t</span>
@@ -315,10 +358,10 @@ function Estadisticas() {
           </div>)}
         {e.estado_fisico && <EstadoFisico l={e.estado_fisico} />}
         <div className="grid c2 mt">
-          <Ranking titulo="Corrientes con más volumen" l={e.corrientes} />
-          <Ranking titulo="Generadores con más volumen" l={e.generadores_top} />
-          <Ranking titulo="Destinos de disposición final" l={e.destinos} />
-          {e.plantas && <Ranking titulo="Planta que recibe" l={e.plantas} />}
+          <Ranking titulo="Corrientes con más volumen" l={e.corrientes} ayuda="est-corrientes" />
+          <Ranking titulo="Generadores con más volumen" l={e.generadores_top} ayuda="est-generadores" />
+          <Ranking titulo="Destinos de disposición final" l={e.destinos} ayuda="est-destinos" />
+          {e.plantas && <Ranking titulo="Planta que recibe" l={e.plantas} ayuda="est-plantas" />}
         </div>
       </>}
     </>
@@ -333,7 +376,7 @@ export default function Reportes() {
     <>
       <div className="no-imprimir">
         <h1>{REPORTES[t][0]}</h1>
-        <p className="sub">{REPORTES[t][1]}</p>
+        <p className="sub titulo-explica">{REPORTES[t][1]}<Explica titulo={REPORTES[t][0]} paso={() => ({ titulo: REPORTES[t][0], texto: QUE_ES[t], foco: 'rep-tipos' })} /></p>
         <nav className="bar" aria-label="Reportes" style={{ marginBottom: 18 }} data-ayuda="rep-tipos">
           {Object.entries(REPORTES).map(([k, [n]]) => <NavLink key={k} to={`/reportes/${k}`} className={`subnav ${k === t ? 'active' : ''}`}>{n}</NavLink>)}
         </nav>

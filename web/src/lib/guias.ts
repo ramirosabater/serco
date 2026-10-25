@@ -21,6 +21,8 @@ export interface Paso {
   ir?: string
   foco?: string
   falta?: string
+  /** Botón extra del paso (por ejemplo, "Ver esos manifiestos"): navega y termina el circuito */
+  boton?: { texto: string; ir: string }
 }
 
 export interface Circuito {
@@ -173,6 +175,15 @@ export const CIRCUITOS: Circuito[] = [
       { foco: 'venc-tabla', titulo: 'Abrir la ficha', texto: 'Tocás la fila del documento que querés actualizar. Te abro uno.' },
       { ir: ':vencimiento', foco: 'ficha-vtos', titulo: 'Nueva fecha y escaneo', texto: 'Cargás la nueva fecha y subís el escaneo. Si es un certificado de chofer, el sistema lee solo el DNI y la fecha.', falta: 'No encuentro nada por vencer para mostrarte.' },
       { foco: 'ficha-guardar', titulo: 'Guardar', texto: 'Al guardar, el sistema vuelve a dejar emitir con ese camión o chofer.' },
+    ],
+  },
+  {
+    id: 'pedir-certificado', titulo: 'Pedirle el certificado al chofer por mail', area: 'altas', roles: EDITAN,
+    pasos: [
+      { ir: ':chofer', foco: 'ficha-datos', titulo: 'El mail del chofer', texto: 'En la ficha del chofer cargás su mail. Si no tiene, el pedido le llega a su transportista.', falta: 'No encuentro un chofer con algo por vencer para mostrarte.' },
+      { foco: 'ficha-pedir', titulo: 'Pedir por mail', texto: 'En cada documento está "Pedir por mail". Le llega un enlace para subir el certificado desde el celular, sin usuario ni contraseña.', falta: 'No encuentro un chofer con algo por vencer para mostrarte.' },
+      { ir: '/vencimientos', foco: 'venc-pedidos', titulo: 'Todos juntos', texto: 'En Vencimientos se les puede pedir a todos los que vencen pronto, con un solo botón. Antes de mandar te muestra a quién.', falta: 'Ahora no hay certificados de choferes para pedir ni para revisar: cuando haya, aparecen arriba de todo en Vencimientos.' },
+      { foco: 'venc-revisar', titulo: 'Revisar y aceptar', texto: 'Lo que suben los choferes aparece acá. Mirás el archivo, confirmás el vencimiento que leyó el sistema y tocás Aceptar: recién ahí pasa a la ficha.', falta: 'Ahora no hay certificados subidos para revisar: cuando un chofer suba uno, aparece arriba de todo en Vencimientos.' },
     ],
   },
   {

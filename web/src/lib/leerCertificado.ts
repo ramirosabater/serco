@@ -99,7 +99,8 @@ export async function leerCertificado(f: File): Promise<Lectura | null> {
     }
     if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return null
     const lib = await pdfjs()
-    const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise
+    // isEvalSupported: false → pdf.js nunca ejecuta código armado a partir del PDF (defensa ante PDFs maliciosos)
+    const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise
     let texto = ''
     for (let p = 1; p <= Math.min(doc.numPages, 3); p++) {
       const page = await doc.getPage(p)

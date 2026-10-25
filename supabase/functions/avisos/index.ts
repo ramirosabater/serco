@@ -3,6 +3,8 @@
 //  2. A Serco, los vencimientos: resumen completo el día configurado; además, todos los días,
 //     lo que vence justo dentro de los días configurados (por defecto 30, 15 y 5).
 //  3. Los lunes, la cantidad transportada por producto de la semana anterior (parámetro mails_reporte_producto).
+//  4. A los choferes, el pedido del certificado nuevo de lo que vence (solo si el parámetro pedir_certificados_auto es "si").
+import { cerrarPedidosViejos, pedirCertificados } from '../_compartido/pedidos.ts'
 import { admin, cors, enviarMail, env, esc, fd, fnum, json, plantilla, quienLlama } from '../_compartido/comun.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
@@ -126,17 +128,40 @@ async function reporteProducto(db: SupabaseClient, forzar: boolean) {
   return { reporte_producto: ok ? `enviado a ${para.join(', ')}` : 'falló el envío' }
 }
 
+/** 4. Pedidos de certificado a los choferes */
+async function pedidosChoferes(db: SupabaseClient) {
+  const cerrados = await cerrarPedidosViejos(db)
+  const { data: prm } = await db.from('parametros').select('valor').eq('clave', 'pedir_certificados_auto').maybeSingle()
+  if (String(prm?.valor ?? 'no').toLowerCase() !== 'si') return { pedidos_choferes: `apagado (parámetro pedir_certificados_auto)`, pedidos_cerrados: cerrados }
+  const r = await pedirCertificados(db, {})
+  return { pedidos_choferes: 'error' in r ? r.error : `${r.enviados} mails, ${r.sin_mail} sin mail, ${r.envios_fallidos} fallidos`, pedidos_cerrados: cerrados }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   const quien = await quienLlama(req)
   if (!quien || (quien.tipo === 'usuario' && quien.rol !== 'admin')) return json({ error: 'No autorizado' }, 401)
-  const body = await req.json().catch(() => ({})) as { solo?: 'certificados' | 'vencimientos' | 'producto'; resumen?: boolean }
+  const body = await req.json().catch(() => ({})) as { solo?: 'certificados' | 'vencimientos' | 'producto' | 'pedidos' | 'prueba'; resumen?: boolean }
   const db = admin()
+  // Mail de prueba al administrador que lo pide (para verificar que Resend está bien configurado)
+  if (body.solo === 'prueba') {
+    const para = quien.tipo === 'usuario' ? quien.email : null
+    if (!para) return json({ error: 'No se sabe a qué mail mandar la prueba.' }, 400)
+    if (!env('RESEND_API_KEY')) return json({ error: 'Falta cargar el secreto RESEND_API_KEY en Supabase.' }, 400)
+    const ok = await enviarMail(db, 'prueba', [para], 'Prueba de avisos del SGRP', plantilla('Prueba de avisos del SGRP',
+      `<p>Si te llegó este mail, los avisos por mail del sistema están funcionando.</p><p>Remitente configurado: ${esc(env('MAIL_DE', '(por defecto)'))}</p>`))
+    if (!ok) {
+      const { data: ult } = await db.from('avisos_log').select('detalle').eq('tipo', 'prueba').order('id', { ascending: false }).limit(1).maybeSingle()
+      return json({ error: `Resend no lo aceptó: ${ult?.detalle ?? 'sin detalle'}` }, 400)
+    }
+    return json({ prueba: `Mail de prueba enviado a ${para}` })
+  }
   try {
     const r: Record<string, unknown> = {}
     if (!body.solo || body.solo === 'certificados') Object.assign(r, await avisarCertificados(db))
     if (!body.solo || body.solo === 'vencimientos') Object.assign(r, await avisarVencimientos(db, !!body.resumen))
     if (!body.solo || body.solo === 'producto') Object.assign(r, await reporteProducto(db, body.solo === 'producto'))
+    if (!body.solo || body.solo === 'pedidos') Object.assign(r, await pedidosChoferes(db))
     return json(r)
   } catch (e) {
     return json({ error: String((e as Error).message ?? e) }, 500)

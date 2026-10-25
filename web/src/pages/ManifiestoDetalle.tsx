@@ -93,7 +93,7 @@ export default function ManifiestoDetalle() {
           <div className="tw"><table>
             <thead><tr><th>Corriente</th><th>Contenedor</th><th style={{ textAlign: 'right' }}>Estimada</th><th style={{ textAlign: 'right' }}>Cantidad</th><th>Etapa</th><th>Manif. Nación</th><th>Certificado</th></tr></thead>
             <tbody>{items.map((i) => (
-              <tr key={i.id}>
+              <tr key={i.id} data-item={i.id}>
                 <td><b>{i.corrientes?.codigo}</b><div className="muted small">{i.corrientes?.descripcion}</div></td>
                 <td>{i.contenedor ?? '—'}</td>
                 <td className="n muted">{i.cant_estimada != null ? num(i.cant_estimada) : '—'}</td>

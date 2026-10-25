@@ -16,6 +16,7 @@ import NacionDetalle from './pages/NacionDetalle'
 import Configuracion from './pages/Configuracion'
 import { PortalRetiros, PortalCertificados } from './pages/Portal'
 import ElegirClave from './auth/ElegirClave'
+import SubirCertificado from './pages/SubirCertificado'
 import AltasLista from './pages/altas/AltasLista'
 import AltasFicha from './pages/altas/AltasFicha'
 import { devJwt } from './lib/supabase'
@@ -24,6 +25,8 @@ function Rutas() {
   const { cargando, perfil, sinPerfil, salir } = useAuth()
   // Desde el mail de invitación o de "olvidé mi contraseña"
   if (window.location.pathname === '/elegir-clave') return <ElegirClave />
+  // Desde el mail que le llega al chofer: página pública, sin usuario
+  if (window.location.pathname.startsWith('/subir/')) return <SubirCertificado />
   if (cargando) return <p className="cargando" style={{ padding: 28 }}>Cargando…</p>
   if (sinPerfil) return (
     <div className="ingreso"><div className="card stack">

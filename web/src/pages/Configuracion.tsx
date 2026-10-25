@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { supabase, mensajeError } from '../lib/supabase'
+import { supabase, mensajeError, invocar } from '../lib/supabase'
 import type { Rol } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
 
@@ -20,16 +20,6 @@ const PUEDE: Record<Rol, string> = {
   operador: 'Emitir e imprimir manifiestos y etiquetas, armar viajes a disposición final, registrar certificados, cargar altas y vencimientos.',
   consulta: 'Ver todo y sacar reportes y libros. No cambia nada.',
   cliente: 'Entra al portal: ve sus propios retiros, en qué etapa están y descarga sus certificados.',
-}
-
-/** Llama a una función de Supabase y devuelve el mensaje de error legible que manda la función */
-async function invocar(nombre: string, body: Record<string, unknown>): Promise<{ data: unknown; error: string | null }> {
-  const { data, error } = await supabase.functions.invoke(nombre, { body })
-  if (!error) return { data, error: null }
-  let detalle = ''
-  try { detalle = (await (error as { context?: Response }).context?.json())?.error ?? '' } catch { /* sin detalle */ }
-  if (!detalle && /Failed to send|fetch/i.test(error.message)) detalle = 'La función todavía no está publicada en Supabase.'
-  return { data: null, error: detalle || mensajeError(error) }
 }
 
 /** Busca generadores por nombre o CUIT y los agrega a una lista */
@@ -232,6 +222,9 @@ const PARAMS: Record<string, { l: string; tipo: 'texto' | 'numero' | 'sino'; op?
   plan_mezclar_solidos: { l: 'Viajes: mezclar corrientes sólidas', tipo: 'sino', op: ['Sí', 'No, una corriente por viaje'] },
   plan_mezclar_barros: { l: 'Viajes: mezclar corrientes semisólidas', tipo: 'sino', op: ['Sí', 'No, una corriente por viaje'] },
   mails_reporte_producto: { l: 'Mails que reciben cada lunes la cantidad por producto', tipo: 'texto' },
+  pedir_certificados_auto: { l: 'Pedir solo por mail a los choferes el certificado que vence', tipo: 'sino', op: ['Sí, todos los días', 'No, solo con el botón'] },
+  dias_pedido_certificado: { l: 'Pedir el certificado a los choferes con (días de anticipación)', tipo: 'numero' },
+  dias_espera_certificado: { l: 'Tito avisa si un certificado de disposición final tarda más de (días)', tipo: 'numero' },
 }
 
 function Parametros() {

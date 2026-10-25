@@ -31,3 +31,5 @@ select nombre, email, rol from perfiles where nombre = 'Pruebas automáticas';
 -- Ya quedan anulados, así que no cuentan en ningún reporte; esto solo los saca de la base.
 -- Para usarlo, sacá los dos guiones del principio de la línea de abajo y tocá Run.
 -- delete from manifiestos where transportista_id = (select id from transportistas where nombre = 'PRUEBA AUTOMATICA');
+-- Y la memoria de Tito que deja la prueba 07 (sugerencias de prueba):
+-- delete from ayudante_memoria where tema like 'prueba-%';

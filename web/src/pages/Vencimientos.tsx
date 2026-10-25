@@ -4,6 +4,7 @@ import { traerTodo } from '../lib/paginar'
 import { supabase } from '../lib/supabase'
 import { fd } from '../lib/formato'
 import type { Alerta } from '../lib/tipos'
+import PedidosChoferes from '../components/PedidosChoferes'
 
 const TIPOS: Record<Alerta['tipo'], string> = { camion: 'Camión', chofer: 'Chofer', generador: 'Generador', transportista: 'Transportista', operador: 'Operador', planta: 'Planta' }
 const PLURAL: Record<Alerta['tipo'], string> = { camion: 'Camiones', chofer: 'Choferes', generador: 'Generadores', transportista: 'Transportistas', operador: 'Operadores', planta: 'Plantas' }
@@ -36,6 +37,7 @@ export default function Vencimientos() {
     <>
       <h1>Vencimientos</h1>
       <p className="sub">Con un documento vencido o sin cargar, el sistema no deja emitir con ese camión, chofer o transportista. Tocá una fila para actualizarlo.</p>
+      <PedidosChoferes />
       <div className="bar">
         <select value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Qué mostrar" data-ayuda="venc-filtro">
           <option value="flota">Camiones y choferes</option>

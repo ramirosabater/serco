@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase'
 import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { Alerta, Manifiesto } from '../lib/tipos'
 import { MiniEtapa, PillEtapa } from '../components/Etapa'
+import Explica, { ExplicarTodo } from '../components/Explica'
+import type { Paso } from '../lib/guias'
 
 interface Resumen {
   etapas: [number, number, number, number, number]
@@ -46,20 +48,28 @@ export default function Tablero() {
 
   const sinDisposicion = res ? res.etapas[0] + res.etapas[1] + res.etapas[2] : 0
   const anio = desde.slice(0, 4) === hasta.slice(0, 4) && desde.endsWith('-01-01') ? `en ${desde.slice(0, 4)}` : `del ${fd(desde)} al ${fd(hasta)}`
+  const ex = explicaciones(res, alertas, anio, desde, hasta)
   return (
     <>
-      <h1>Tablero</h1>
+      <div className="bar" style={{ justifyContent: 'space-between', margin: 0 }}>
+        <h1>Tablero</h1>
+        {res && <ExplicarTodo titulo="Qué dice el tablero" pasos={() => Object.values(ex).map((f) => f()).filter((x): x is Paso => !!x)} texto="Explicame el tablero" />}
+      </div>
       <p className="sub">Situación al {fd(hoy())}. Manifiestos emitidos {anio}.</p>
       <div className="grid k4">
-        <Link to={`/manifiestos?desde=${desde}&hasta=${hasta}`} className="card kpi"><div className="v">{res ? num(res.etapas.reduce((a, b) => a + b, 0)) : '…'}</div><div className="l">manifiestos {anio}</div></Link>
-        <div className="card kpi"><div className="v">{res ? `${num(Math.round(res.kgs / 1000))} t` : '…'}</div><div className="l">de residuos sólidos y semisólidos</div></div>
-        <div className="card kpi"><div className="v">{res ? num(res.generadores) : '…'}</div><div className="l">generadores atendidos</div></div>
-        <Link to="/planta" className={`card kpi ${sinDisposicion ? 'alerta' : ''}`}><div className="v">{num(sinDisposicion)}</div><div className="l">manifiestos sin disposición final</div></Link>
+        <div className="card kpi" data-ayuda="kpi-total"><Link to={`/manifiestos?desde=${desde}&hasta=${hasta}`} className="kpi-link"><div className="v">{res ? num(res.etapas.reduce((a, b) => a + b, 0)) : '…'}</div><div className="l">manifiestos {anio}</div></Link>
+          {res && <Explica titulo="Manifiestos del período" paso={ex.total} />}</div>
+        <div className="card kpi" data-ayuda="kpi-toneladas"><div className="v">{res ? `${num(Math.round(res.kgs / 1000))} t` : '…'}</div><div className="l">de residuos sólidos y semisólidos</div>
+          {res && <Explica titulo="Toneladas" paso={ex.toneladas} />}</div>
+        <div className="card kpi" data-ayuda="kpi-generadores"><div className="v">{res ? num(res.generadores) : '…'}</div><div className="l">generadores atendidos</div>
+          {res && <Explica titulo="Generadores atendidos" paso={ex.generadores} />}</div>
+        <div className={`card kpi ${sinDisposicion ? 'alerta' : ''}`} data-ayuda="kpi-sin-disposicion"><Link to="/planta" className="kpi-link"><div className="v">{num(sinDisposicion)}</div><div className="l">manifiestos sin disposición final</div></Link>
+          {res && <Explica titulo="Sin disposición final" paso={ex.sinDisposicion} />}</div>
       </div>
 
       <div className="card mt" data-ayuda="tab-etapas">
         <div className="bar" style={{ justifyContent: 'space-between', margin: 0 }}>
-          <h2 style={{ margin: 0 }}>Manifiestos por etapa</h2>
+          <h2 style={{ margin: 0 }}>Manifiestos por etapa{res && <Explica titulo="Manifiestos por etapa" paso={ex.etapas} />}</h2>
           <span className="bar" style={{ margin: 0 }}>
             <label className="small">Desde <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
             <label className="small">Hasta <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></label>
@@ -69,12 +79,12 @@ export default function Tablero() {
       </div>
 
       <div className="grid c21 mt">
-        <div className="card">
-          <h2>Volumen retirado, últimos 12 meses</h2>
+        <div className="card" data-ayuda="tab-volumen">
+          <h2>Volumen retirado, últimos 12 meses{res && <Explica titulo="Volumen retirado" paso={ex.volumen} />}</h2>
           {res && <Volumen meses={res.meses} />}
         </div>
-        <div className="card">
-          <h2>Habilitaciones a revisar</h2>
+        <div className="card" data-ayuda="tab-habilitaciones">
+          <h2>Habilitaciones a revisar{res && <Explica titulo="Habilitaciones a revisar" paso={ex.habilitaciones} />}</h2>
           {alertas.length === 0 ? <p className="muted">No hay vencimientos en los próximos días.</p> : <>
             <div className="lista-it">{alertas.slice(0, 6).map((a) => (
               <Link key={`${a.tipo}${a.id}${a.documento}`} to={`/altas/${a.tipo === 'camion' ? 'camiones' : 'choferes'}/${a.id}`} className="it">
@@ -88,9 +98,9 @@ export default function Tablero() {
       </div>
 
       {res && res.regularizar.length > 0 && (
-        <div className="card mt">
+        <div className="card mt" data-ayuda="tab-regularizar">
           <div className="bar" style={{ justifyContent: 'space-between', margin: '0 0 6px' }}>
-            <h2 style={{ margin: 0 }}>Generadores a regularizar</h2>
+            <h2 style={{ margin: 0 }}>Generadores a regularizar<Explica titulo="Generadores a regularizar" paso={ex.regularizar} /></h2>
             <span className="muted small">{num(res.regularizar_total.vencido)} con habilitación vencida · {num(res.regularizar_total.por_vencer)} por vencer · {num(res.regularizar_total.sin_cargar)} sin cargar</span>
           </div>
           <div className="gr-lista">{res.regularizar.slice(0, 8).map((g) => (
@@ -122,6 +132,55 @@ export default function Tablero() {
       </div>
     </>
   )
+}
+
+/** Lo que dice Tito de cada número del tablero, con los valores que se ven en pantalla */
+function explicaciones(res: Resumen | null, alertas: Alerta[], anio: string, desde: string, hasta: string): Record<string, () => Paso | null> {
+  if (!res) return {}
+  const [e0, e1, e2, e3, e4] = res.etapas
+  const total = e0 + e1 + e2 + e3 + e4
+  const pc = (v: number) => (total ? Math.round((v / total) * 100) : 0)
+  const t = (kg: number) => num(Math.round(kg / 1000))
+  const mesNombre = (m: string) => `${['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][+m.slice(5) - 1]} de ${m.slice(0, 4)}`
+  return {
+    total: () => ({ titulo: `${num(total)} manifiestos`, foco: 'kpi-total',
+      texto: `Son los manifiestos emitidos ${anio}, sin contar los anulados: los azules de Serco y los rosas de otros transportistas. El período se cambia con Desde y Hasta, en el cuadro de etapas.`,
+      boton: { texto: 'Ver la lista', ir: `/manifiestos?desde=${desde}&hasta=${hasta}` } }),
+    toneladas: () => ({ titulo: `${t(res.kgs)} toneladas`, foco: 'kpi-toneladas',
+      texto: `Es la suma de todo lo que se cargó en kilos en esos manifiestos: sólidos y barros. Los líquidos van en litros y no entran acá.${e0 ? ` Los ${num(e0)} manifiestos que siguen Iniciados todavía no suman, porque les falta la sección 3.` : ''}` }),
+    generadores: () => ({ titulo: `${num(res.generadores)} generadores`, foco: 'kpi-generadores',
+      texto: `Son los generadores distintos que tuvieron al menos un retiro ${anio}${res.generadores ? `: en promedio, ${num(Math.round((total / res.generadores) * 10) / 10)} manifiestos cada uno` : ''}.` }),
+    sinDisposicion: () => ({ titulo: `${num(e0 + e1 + e2)} sin disposición final`, foco: 'kpi-sin-disposicion',
+      texto: `Son los manifiestos del período que todavía no tienen certificado de disposición final: ${num(e0)} Iniciados, a los que les falta la sección 3; ${num(e1)} Almacenados en planta; y ${num(e2)} En tránsito, esperando el certificado del operador.`,
+      boton: { texto: 'Ir a Planta', ir: '/planta' } }),
+    etapas: () => {
+      const nombres = ['Iniciado', 'Almacenado', 'En tránsito', 'Dispuesto', 'Certificado entregado']
+      const mayor = res.etapas.indexOf(Math.max(...res.etapas))
+      return { titulo: 'Manifiestos por etapa', foco: 'tab-etapas',
+        texto: `Cada barra es la etapa en la que está hoy cada manifiesto. Iniciado: emitido, falta cargar los residuos. Almacenado: está en planta. En tránsito: viajó al operador. Dispuesto: tiene certificado. Certificado entregado: el cliente ya lo recibió. La barra más alta es ${nombres[mayor]}, con ${num(res.etapas[mayor])} manifiestos, el ${pc(res.etapas[mayor])} %. Tocá una barra para ver esa lista.` }
+    },
+    volumen: () => {
+      const m = res.meses
+      if (!m.length) return null
+      const kg = m.reduce((a, x) => a + x.kgs, 0), lt = m.reduce((a, x) => a + x.lts, 0)
+      const mejor = m.reduce((a, x) => (x.kgs > a.kgs ? x : a), m[0])
+      const pasado = m[m.length - 2], previos = m.slice(0, -1)
+      const prom = previos.length ? previos.reduce((a, x) => a + x.kgs, 0) / previos.length : 0
+      const dif = prom && pasado ? Math.round(((pasado.kgs - prom) / prom) * 100) : 0
+      return { titulo: 'Volumen retirado', foco: 'tab-volumen',
+        texto: `En los últimos 12 meses se retiraron ${t(kg)} toneladas${lt ? ` y ${num(Math.round(lt))} litros` : ''}. El mes con más kilos fue ${mesNombre(mejor.mes)}, con ${t(mejor.kgs)} toneladas.${pasado ? ` El mes pasado, ${mesNombre(pasado.mes)}, fueron ${t(pasado.kgs)} toneladas: ${dif === 0 ? 'lo mismo que' : `un ${Math.abs(dif)} % ${dif > 0 ? 'más' : 'menos'} que`} el promedio.` : ''} La última barra es el mes en curso, todavía incompleto.` }
+    },
+    habilitaciones: () => {
+      const pv = alertas.filter((a) => a.estado === 'por_vencer').length, v = alertas.filter((a) => a.estado === 'vencido').length
+      return { titulo: 'Habilitaciones a revisar', foco: 'tab-habilitaciones',
+        texto: alertas.length ? `Son camiones y choferes con documentos por vencer (${pv} en esta lista) o vencidos (${v}). Con un documento vencido, el sistema no deja emitir con ese camión o chofer. Desde Vencimientos se le puede pedir el certificado nuevo al chofer por mail.`
+          : 'No hay camiones ni choferes con documentos por vencer en los próximos días.',
+        boton: { texto: 'Ver vencimientos', ir: '/vencimientos' } }
+    },
+    regularizar: () => res.regularizar.length ? ({ titulo: 'Generadores a regularizar', foco: 'tab-regularizar',
+      texto: `Son generadores con retiros en el último año cuya habilitación municipal está vencida (${num(res.regularizar_total.vencido)}), por vencer (${num(res.regularizar_total.por_vencer)}) o sin cargar (${num(res.regularizar_total.sin_cargar)}). Si en Configuración está activado el bloqueo, no se les puede emitir hasta actualizarla.`,
+      boton: { texto: 'Ver vencimientos de generadores', ir: '/vencimientos?tipo=generador' } }) : null,
+  }
 }
 
 function Etapas({ valores, onElegir, desde, hasta }: { valores: number[]; onElegir: (k: number) => void; desde: string; hasta: string }) {
