@@ -16,7 +16,7 @@ const REPORTES: Record<string, [string, string]> = {
   estadisticas: ['Estadísticas', 'Corrientes, generadores y destinos con más volumen.'],
 }
 
-/** Qué explica Tito de cada reporte (el "?" junto al título) */
+/** Qué explica Serquito de cada reporte (el "?" junto al título) */
 const QUE_ES: Record<string, string> = {
   producto: 'Suma lo retirado de cada corriente, por semana, quincena o mes, según la fecha del retiro. Se elige la unidad (kilos, litros o metros cúbicos) y se puede filtrar por planta o transportista. Los manifiestos anulados no cuentan. Se exporta a Excel y, si está configurado, llega por mail cada lunes.',
   provincial: 'Es el libro de movimientos de cada planta: un renglón por residuo, con generador, corriente, cantidad y en qué quedó. Se elige la planta y el período, y se imprime para rubricar o se exporta a Excel.',

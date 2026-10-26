@@ -3,7 +3,7 @@ import { ETAPAS } from '../lib/formato'
 import { colorEtapa } from '../components/Etapa'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { Alerta, Manifiesto } from '../lib/tipos'
 import { MiniEtapa, PillEtapa } from '../components/Etapa'
@@ -99,6 +99,7 @@ export default function Tablero() {
   const [ultimos, setUltimos] = useState<Manifiesto[]>([])
   const [alertas, setAlertas] = useState<Alerta[]>([])
   const [res, setRes] = useState<Resumen | null>(null)
+  const [error, setError] = useState('')
   const [plantas, setPlantas] = useState<Op[]>([])
   const [transportistas, setTransportistas] = useState<Op[]>([])
   const [generadores, setGeneradores] = useState<Op[]>([])
@@ -114,9 +115,20 @@ export default function Tablero() {
   useEffect(() => {
     if (!desde || !hasta) return
     let vivo = true
-    supabase.rpc('tablero_resumen', { p_desde: desde, p_hasta: hasta, p_planta: planta ? Number(planta) : null, p_transportista: transp ? Number(transp) : null,
-      p_generador: gen ? Number(gen) : null, p_tipo: tipo || null, p_etapa: etapa ? Number(etapa) : null })
-      .then(({ data }) => { if (vivo) setRes(data as Resumen) })
+    setError('')
+    ;(async () => {
+      let { data, error } = await supabase.rpc('tablero_resumen', { p_desde: desde, p_hasta: hasta, p_planta: planta ? Number(planta) : null,
+        p_transportista: transp ? Number(transp) : null, p_generador: gen ? Number(gen) : null, p_tipo: tipo || null, p_etapa: etapa ? Number(etapa) : null })
+      // Base sin la actualización de filtros (2026-10-25-tablero-filtros.sql): se muestra igual, sin filtrar, y se avisa
+      if (error && (error.code === 'PGRST202' || /function|función/i.test(error.message))) {
+        ({ data, error } = await supabase.rpc('tablero_resumen', { p_desde: desde, p_hasta: hasta }))
+        if (vivo && !error) setError('Los filtros todavía no funcionan: falta correr en Supabase la actualización 2026-10-25-tablero-filtros.sql. Se muestra todo el período, sin filtrar.')
+      }
+      if (!vivo) return
+      if (error || !data) { setError(`No se pudieron cargar los números del tablero: ${mensajeError(error) || 'sin respuesta'}`); return }
+      const r = data as Resumen
+      setRes({ ...r, total: r.total ?? r.etapas.reduce((a, b) => a + b, 0), lts: r.lts ?? 0 })
+    })()
     return () => { vivo = false }
   }, [desde, hasta, planta, transp, gen, tipo, etapa])
 
@@ -163,6 +175,7 @@ export default function Tablero() {
       </div>
       <p className="sub">Situación al {fd(hoy())}. Manifiestos emitidos {anio}{filtrosTexto ? ` · ${filtrosTexto}` : ''}.</p>
       <Filtros fl={fl} plantas={plantas} transportistas={transportistas} generadores={generadores} />
+      {error && <div className="aviso haz mt" role="alert">{error}</div>}
       <div className="grid k4 mt">
         <div className="card kpi" data-ayuda="kpi-total"><Link to={listaUrl} className="kpi-link"><div className="v">{res ? num(res.total) : '…'}</div><div className="l">manifiestos {anio}</div></Link>
           {res && <Explica titulo="Manifiestos del período" paso={ex.total} />}</div>
@@ -238,7 +251,7 @@ export default function Tablero() {
   )
 }
 
-/** Lo que dice Tito de cada número del tablero, con los valores que se ven en pantalla */
+/** Lo que dice Serquito de cada número del tablero, con los valores que se ven en pantalla */
 function explicaciones(res: Resumen | null, alertas: Alerta[], anio: string, desde: string, hasta: string, filtros: string): Record<string, () => Paso | null> {
   if (!res) return {}
   const [e0, e1, e2, e3, e4] = res.etapas

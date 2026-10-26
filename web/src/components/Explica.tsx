@@ -1,6 +1,6 @@
 import type { Paso } from '../lib/guias'
 
-// "¿Qué es esto?": un botoncito junto a un número o un gráfico. Tito lo explica con los datos que se ven
+// "¿Qué es esto?": un botoncito junto a un número o un gráfico. Serquito lo explica con los datos que se ven
 // en ese momento, resaltando lo que se explica. Solo explica y, si hace falta, ofrece ir a ver el detalle.
 
 export function explicar(titulo: string, pasos: Paso[], seguido = false) {

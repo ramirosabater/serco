@@ -1,7 +1,7 @@
 import { test, expect } from './ayuda'
 import type { Page } from '@playwright/test'
 
-// Sugerencias de Tito: la tarjeta, "Ahora no", "No me lo preguntes más" (queda en la base) y "Como siempre".
+// Sugerencias de Serquito: la tarjeta, "Ahora no", "No me lo preguntes más" (queda en la base) y "Como siempre".
 // Las reglas dependen de los datos, así que acá se prueba que respondan sin error; la tarjeta se prueba
 // con sugerencias de prueba que se agregan desde la página (temas únicos, no molestan a nadie).
 test.use({ sugerencias: true })
@@ -65,7 +65,7 @@ test('aceptar lleva a la pantalla y resalta; las demás esperan en el globo', as
   await expect(page.locator('.bt-foco')).toBeVisible({ timeout: 8000 })
   await page.locator('.bt-globo').getByRole('button', { name: '¡Listo!' }).click()
 
-  // Al cerrar, la siguiente no salta sola: queda el numerito en Tito y se ve en el globo
+  // Al cerrar, la siguiente no salta sola: queda el numerito en Serquito y se ve en el globo
   await sugerir(page, { tema: `prueba-${t}-3`, titulo: 'Tercera', texto: 'Tercera de prueba.', prioridad: 0 })
   await sugerir(page, { tema: `prueba-${t}-4`, titulo: 'Cuarta', texto: 'Cuarta de prueba.', prioridad: 1 })
   await expect(tarjeta(page)).toContainText('Tercera de prueba.')

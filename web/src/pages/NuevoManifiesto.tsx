@@ -69,7 +69,7 @@ export default function NuevoManifiesto() {
     traerTodo<Gen>(() => supabase.from('generadores').select('id, nombre, cuit, generador_principal_id, hab_mun_vto, actividad').eq('activo', true).order('nombre'))
       .then(({ data }) => {
         setGeneradores(data)
-        // Desde una sugerencia de Tito: /manifiestos/nuevo?generador=123
+        // Desde una sugerencia de Serquito: /manifiestos/nuevo?generador=123
         const pedido = Number(new URLSearchParams(window.location.search).get('generador'))
         const g = pedido ? data.find((x) => x.id === pedido) : null
         if (g) setGenTexto((t) => t || g.nombre)
@@ -102,7 +102,7 @@ export default function NuevoManifiesto() {
       .then(({ data }) => { const l = (data ?? []).map((d) => d.direccion as string); setDirecciones(l); setDireccion(l[0] ?? '') })
   }, [generador])
 
-  // Tito propone lo de siempre de este generador (dirección, transportista, chofer y camión); el usuario decide
+  // Serquito propone lo de siempre de este generador (dirección, transportista, chofer y camión); el usuario decide
   useEffect(() => {
     if (!generador) return
     const clave = `como-siempre:${generador.id}`

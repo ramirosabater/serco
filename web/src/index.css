@@ -2,6 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400..800&display=swap');
 
 :root {
+  --sq: #2F4F9E; /* Serquito: azul propio, distinto del verde de la empresa */
   --bg: #F3F7F1; --card: #FFFFFF; --ink: #1C2B1F; --mute: #5F6F62; --line: #DDE7DA;
   --acc: #0B8A22; --acc-soft: #E4F4D6; --on-acc: #FFFFFF;
   --haz: #C27A0E; --haz-soft: #FDF1DC; --bad: #C0392B; --bad-soft: #FCE6E3; --chip: #EEF3EC;
@@ -13,6 +14,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
+    --sq: #7E9CE8;
     --bg: #101712; --card: #18221A; --ink: #E4EEE4; --mute: #9DB09F; --line: #2A3A2D;
     --acc: #5CC46E; --acc-soft: #1C3620; --on-acc: #0E1A10;
     --haz: #E6A948; --haz-soft: #3A2B10; --bad: #EC7A6E; --bad-soft: #3A1916; --chip: #223024;
@@ -456,23 +458,23 @@ table.piv tr.tot td { background: var(--acc-soft); }
 h2.paso-h { display: flex; align-items: center; gap: 12px; margin: 0; }
 h2.paso-h .sn { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-weight: 800; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
 
-/* ------------------------------------------------------------ Tito, el ayudante */
+/* ------------------------------------------------------------ Serquito, el ayudante */
 .bt-ayudante { position: fixed; right: 16px; bottom: 12px; z-index: 75; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; pointer-events: none; }
 .bt-ayudante > * { pointer-events: auto; }
 .bt-ayudante.izq { right: auto; left: 16px; align-items: flex-start; }
 .bt-ayudante.chico { right: 6px; bottom: 6px; opacity: 0.9; }
 .bt-boton { background: none !important; border: 0 !important; padding: 0 !important; box-shadow: none !important; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
 .bt-boton:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; border-radius: 16px; }
-.bt-etiqueta { background: var(--acc); color: var(--on-acc, #fff); font-weight: 800; font-size: 12.5px; border-radius: 999px; padding: 3px 12px; margin-top: -10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
-.bt-globo { position: relative; width: min(390px, calc(100vw - 32px)); margin-right: 26px; background: var(--card); color: var(--ink); border: 2px solid var(--acc); border-radius: 18px; padding: 14px 16px 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25); }
-.bt-globo::after { content: ''; position: absolute; bottom: -11px; right: 44px; width: 18px; height: 18px; background: var(--card); border-right: 2px solid var(--acc); border-bottom: 2px solid var(--acc); transform: rotate(45deg); }
+.bt-etiqueta { background: var(--sq, #2F4F9E); color: #fff; font-weight: 800; font-size: 12.5px; border-radius: 999px; padding: 3px 12px; margin-top: -10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
+.bt-globo { position: relative; width: min(390px, calc(100vw - 32px)); margin-right: 26px; background: var(--card); color: var(--ink); border: 2px solid var(--sq, #2F4F9E); border-radius: 18px; padding: 14px 16px 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25); }
+.bt-globo::after { content: ''; position: absolute; bottom: -11px; right: 44px; width: 18px; height: 18px; background: var(--card); border-right: 2px solid var(--sq, #2F4F9E); border-bottom: 2px solid var(--sq, #2F4F9E); transform: rotate(45deg); }
 .izq .bt-globo { margin-right: 0; margin-left: 26px; }
 .izq .bt-globo::after { right: auto; left: 44px; }
 .bt-globo h3 { margin: 6px 0 2px; font-size: 16px; }
 .bt-cab { display: flex; justify-content: space-between; align-items: center; }
 .bt-meta { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--mute); font-weight: 700; }
 .bt-progreso { height: 4px; background: var(--line); border-radius: 99px; margin: 6px 0 2px; overflow: hidden; }
-.bt-progreso span { display: block; height: 100%; background: var(--acc); border-radius: 99px; transition: width 0.4s ease; }
+.bt-progreso span { display: block; height: 100%; background: #FF7A1A; border-radius: 99px; transition: width 0.4s ease; }
 .bt-texto { margin: 4px 0 10px; font-size: 14.5px; line-height: 1.45; min-height: 3.4em; }
 .bt-cursor { color: var(--acc); animation: bt-titila 0.8s steps(1) infinite; }
 .bt-botones { display: flex; justify-content: space-between; gap: 8px; }
@@ -488,11 +490,11 @@ h2.paso-h .sn { flex: none; width: 34px; height: 34px; border-radius: 50%; backg
 .tito { display: block; overflow: visible; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15)); }
 .tito .bt-sombra { fill: #000; opacity: 0.12; }
 .tito .bt-cuerpo { animation: bt-flota 3.4s ease-in-out infinite; }
-.tito .bt-ojos { animation: bt-parpadeo 4.6s infinite; transform-origin: 60px 68px; }
+.tito .bt-ojos { animation: bt-parpadeo 4.6s infinite; transform-origin: 52px 68px; }
 .tito .bt-brazo { transition: transform 0.55s cubic-bezier(.3, 1.4, .5, 1); }
 .tito .bt-boca { opacity: 0; }
 .tito.habla .bt-sonrisa { opacity: 0; }
-.tito.habla .bt-boca { opacity: 1; animation: bt-habla 0.22s ease-in-out infinite alternate; transform-origin: 60px 82px; }
+.tito.habla .bt-boca { opacity: 1; animation: bt-habla 0.22s ease-in-out infinite alternate; transform-origin: 52px 85px; }
 .tito.saluda .bt-derecho { animation: bt-saludo 0.9s ease-in-out infinite alternate; }
 .tito.festeja .bt-cuerpo { animation: bt-salta 0.5s ease-in-out 4; }
 @keyframes bt-flota { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
@@ -515,7 +517,7 @@ h2.paso-h .sn { flex: none; width: 34px; height: 34px; border-radius: 50%; backg
 .subir-icono { font-size: 34px; line-height: 1; }
 button.grande { padding: 14px 18px; font-size: 17px; width: 100%; }
 
-/* Sugerencias de Tito */
+/* Sugerencias de Serquito */
 .bt-sug h3 { margin: 0 0 4px; font-size: 15px; }
 .bt-sug .bt-texto { min-height: 0; }
 .bt-sug .bt-botones { flex-wrap: wrap; }
@@ -540,7 +542,7 @@ button.grande { padding: 14px 18px; font-size: 17px; width: 100%; }
 @media (prefers-reduced-motion: reduce) { .tito *, .bt-foco, .bt-cursor { animation: none !important; transition: none !important; } }
 @media print { .bt-ayudante, .bt-foco { display: none !important; } }
 
-/* "¿Qué significa?" junto a los números y gráficos (Tito los explica) */
+/* "¿Qué significa?" junto a los números y gráficos (Serquito los explica) */
 .explica { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1.5px solid var(--line); background: var(--card); color: var(--mute); font-size: 13px; font-weight: 800; line-height: 1; cursor: pointer; flex: none; }
 .explica:hover, .explica:focus-visible { border-color: var(--acc); color: var(--acc); background: var(--acc-soft); }
 .kpi { position: relative; }

@@ -224,7 +224,7 @@ const PARAMS: Record<string, { l: string; tipo: 'texto' | 'numero' | 'sino'; op?
   mails_reporte_producto: { l: 'Mails que reciben cada lunes la cantidad por producto', tipo: 'texto' },
   pedir_certificados_auto: { l: 'Pedir solo por mail a los choferes el certificado que vence', tipo: 'sino', op: ['Sí, todos los días', 'No, solo con el botón'] },
   dias_pedido_certificado: { l: 'Pedir el certificado a los choferes con (días de anticipación)', tipo: 'numero' },
-  dias_espera_certificado: { l: 'Tito avisa si un certificado de disposición final tarda más de (días)', tipo: 'numero' },
+  dias_espera_certificado: { l: 'Serquito avisa si un certificado de disposición final tarda más de (días)', tipo: 'numero' },
 }
 
 function Parametros() {

@@ -1,9 +1,9 @@
 import type { Rol } from './tipos'
 
-// Circuitos de ayuda de Tito: tutoriales paso a paso, agrupados por área de la app.
+// Circuitos de ayuda de Serquito: tutoriales paso a paso, agrupados por área de la app.
 //
 // Cada paso:
-//   texto  lo que dice Tito (en voz alta y en el globo)
+//   texto  lo que dice Serquito (en voz alta y en el globo)
 //   ir     a qué pantalla lleva antes de explicar. Solo navega: nunca toca guardar, borrar ni nada que cambie datos.
 //          Además de una ruta ("/planta?v=transito") acepta atajos que buscan un ejemplo real:
 //          ":manifiesto"  un manifiesto con residuos · ":manifiesto/imprimir" · ":manifiesto/etiquetas"
@@ -33,7 +33,7 @@ export interface Circuito {
   pasos: Paso[]
 }
 
-/** Área de cada pantalla: cambia el "traje" de Tito y qué circuitos muestra primero */
+/** Área de cada pantalla: cambia el "traje" de Serquito y qué circuitos muestra primero */
 export function areaDe(ruta: string): Area {
   if (ruta.startsWith('/manifiestos') || ruta.startsWith('/agenda')) return 'manifiestos'
   if (ruta.startsWith('/planta') || ruta.startsWith('/nacion')) return 'planta'

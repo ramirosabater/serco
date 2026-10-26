@@ -3,9 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { areaDe, CIRCUITOS, NOMBRE_AREA, type Circuito, type Paso } from '../lib/guias'
-import Tito from './Tito'
+import Serquito from './Serquito'
 
-// Tito, el ayudante: botón flotante abajo a la derecha, circuitos guiados por área, voz y sugerencias.
+// Serquito, el ayudante: botón flotante abajo a la derecha, circuitos guiados por área, voz y sugerencias.
 // Nunca guarda, borra ni envía datos por su cuenta: solo navega (pantallas y pestañas), resalta, explica
 // y propone. Lo único que guarda es su propia memoria (qué sugerencias pospuso o no quiere ver cada usuario).
 
@@ -115,7 +115,7 @@ async function resolverIr(ir: string): Promise<string | null> {
 }
 
 // ------------------------------------------------------------------ sugerencias
-/** Una sugerencia de Tito. Las reglas están en la base (sugerencias_ayudante / sugerencias_manifiesto); las pantallas pueden sumar las suyas. */
+/** Una sugerencia de Serquito. Las reglas están en la base (sugerencias_ayudante / sugerencias_manifiesto); las pantallas pueden sumar las suyas. */
 export interface Sugerencia {
   /** Lo que se recuerda con "No me lo preguntes más" */
   tema: string
@@ -189,10 +189,10 @@ export default function Ayuda() {
   const mios = useMemo(() => CIRCUITOS.filter((c) => perfil && c.roles.includes(perfil.rol)), [perfil])
   const p = circuito?.pasos[paso]
 
-  // El área de la pantalla queda marcada en el body (la usa el traje de Tito)
+  // El área de la pantalla queda marcada en el body (la usa el traje de Serquito)
   useEffect(() => { document.body.dataset.area = area }, [area])
 
-  // Si hay una ventana abierta, Tito se achica para no tapar sus botones
+  // Si hay una ventana abierta, Serquito se achica para no tapar sus botones
   useEffect(() => {
     const t = window.setInterval(() => setHayModal(!!document.querySelector('.modal-fondo, [aria-modal="true"]')), 500)
     return () => window.clearInterval(t)
@@ -384,7 +384,7 @@ export default function Ayuda() {
 
   if (!perfil || !mios.length) return null
 
-  // Si lo resaltado cae abajo a la derecha, Tito se pasa a la izquierda para no taparlo
+  // Si lo resaltado cae abajo a la derecha, Serquito se pasa a la izquierda para no taparlo
   const izquierda = !!rect && rect.right > window.innerWidth - 460 && rect.bottom > window.innerHeight - 320
   const enCircuito = !!circuito && !!p
   const sug = !enCircuito && !abierto && !suelto ? actual : null
@@ -400,7 +400,7 @@ export default function Ayuda() {
 
       <div className={`bt-ayudante${izquierda ? ' izq' : ''}${hayModal && !globo ? ' chico' : ''}${globo ? ' con-globo' : ''}`} data-area={area}>
         {globo && (
-          <div className="bt-globo" role="dialog" aria-label={enCircuito ? `Ayuda: ${circuito!.titulo}` : sug ? 'Sugerencia de Tito' : 'Ayuda'}>
+          <div className="bt-globo" role="dialog" aria-label={enCircuito ? `Ayuda: ${circuito!.titulo}` : sug ? 'Sugerencia de Serquito' : 'Ayuda'}>
             {enCircuito ? <>
               <div className="bt-meta"><span>{circuito!.titulo}</span>{circuito!.pasos.length > 1 && <span>{paso + 1} de {circuito!.pasos.length}</span>}</div>
               {circuito!.pasos.length > 1 && <div className="bt-progreso" aria-hidden="true"><span style={{ width: `${((paso + 1) / circuito!.pasos.length) * 100}%` }} /></div>}
@@ -449,7 +449,7 @@ export default function Ayuda() {
               </div>
             ) : <>
               <div className="bt-cab">
-                <b>¡Hola! Soy Tito.</b>
+                <b>¡Hola! Soy Serquito.</b>
                 <button className="link" onClick={() => setAbierto(false)} aria-label="Cerrar">✕</button>
               </div>
               {pendientes.length > 0 && <section className="bt-lista" style={{ marginBottom: 8 }}><h4>{pendientes.length === 1 ? 'Tengo una sugerencia' : `Tengo ${pendientes.length} sugerencias`}</h4>
@@ -474,7 +474,7 @@ export default function Ayuda() {
 
         <button className="bt-boton" onClick={() => { if (enCircuito) return; setAbierto(!abierto) }} aria-label="Ayuda" aria-expanded={globo}
           title={enCircuito ? undefined : 'Ayuda'}>
-          <Tito ref={yo} traje={area} angulo={enCircuito && !festejo ? angulo : null} hablando={hablando || (!listo && !buscando && globo)}
+          <Serquito ref={yo} traje={area} angulo={enCircuito && !festejo ? angulo : null} hablando={hablando || (!listo && !buscando && globo)}
             festejo={festejo} saluda={(abierto && !enCircuito) || !!sug} tamano={hayModal && !globo ? 58 : 92} />
           {!globo && <span className="bt-etiqueta">Ayuda</span>}
           {!globo && memoriaLista && pendientes.length > 0 && <span className="bt-aviso" title={`${pendientes.length} sugerencias`} aria-label={`${pendientes.length} sugerencias`}>{pendientes.length}</span>}

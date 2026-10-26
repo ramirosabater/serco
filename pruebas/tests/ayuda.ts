@@ -9,7 +9,7 @@ export function campo(dentro: Page | Locator, texto: string, n = 0): Locator {
 }
 
 /** Igual que el test de Playwright, pero falla si la página tira un error de JavaScript.
- *  Las sugerencias de Tito se apagan (para que no tapen botones), salvo con test.use({ sugerencias: true }). */
+ *  Las sugerencias de Serquito se apagan (para que no tapen botones), salvo con test.use({ sugerencias: true }). */
 export const test = base.extend<{ sinErrores: void; sugerencias: boolean }>({
   sugerencias: [false, { option: true }],
   sinErrores: [async ({ page, sugerencias }, usar) => {

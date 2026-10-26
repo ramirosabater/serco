@@ -1,7 +1,7 @@
 import { test, expect } from './ayuda'
 import type { Page } from '@playwright/test'
 
-// Tito, el ayudante. La voz del navegador se reemplaza por una de mentira que avisa cuándo
+// Serquito, el ayudante. La voz del navegador se reemplaza por una de mentira que avisa cuándo
 // empieza y termina, así se puede probar que el circuito avanza recién después de hablar.
 async function vozDePrueba(page: Page) {
   await page.addInitScript(() => {
