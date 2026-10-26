@@ -17,6 +17,8 @@ import Configuracion from './pages/Configuracion'
 import { PortalRetiros, PortalCertificados } from './pages/Portal'
 import ElegirClave from './auth/ElegirClave'
 import SubirCertificado from './pages/SubirCertificado'
+import CertificadosSerco from './pages/CertificadosSerco'
+import ImprimirCertificadoSerco from './pages/ImprimirCertificadoSerco'
 import AltasLista from './pages/altas/AltasLista'
 import AltasFicha from './pages/altas/AltasFicha'
 import { devJwt } from './lib/supabase'
@@ -58,6 +60,8 @@ function Rutas() {
         <Route path="agenda" element={<Agenda />} />
         <Route path="nacion/:id" element={<NacionDetalle />} />
         <Route path="nacion/:id/imprimir" element={<ImprimirManifiesto viaje />} />
+        <Route path="certificados-serco" element={<CertificadosSerco />} />
+        <Route path="certificados-serco/:numero" element={<ImprimirCertificadoSerco />} />
         <Route path="vista-cliente" element={<PortalRetiros />} />
         <Route path="vista-cliente/certificados" element={<PortalCertificados />} />
         <Route path="reportes" element={<Navigate to="/reportes/producto" replace />} />

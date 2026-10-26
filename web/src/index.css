@@ -558,3 +558,40 @@ h2 .explica, .titulo-explica .explica { margin-left: 8px; vertical-align: middle
 .filtros .campo.ancho { grid-column: span 2; }
 .filtros .limpiar { justify-self: start; padding-bottom: 12px; white-space: nowrap; }
 @media (max-width: 520px) { .filtros { grid-template-columns: 1fr 1fr; } }
+
+/* Certificado de disposición final de Serco (original y duplicado) */
+@page certificado { size: A4; margin: 12mm 12mm 12mm; }
+.cert-hojas { display: flex; flex-direction: column; gap: 24px; align-items: center; }
+.cert-hoja { background: #fff; color: #111; width: 210mm; max-width: 100%; min-height: 297mm; padding: 14mm 12mm 12mm; box-shadow: 0 2px 12px rgba(0,0,0,.12); display: flex; flex-direction: column; font: 10pt/1.35 Verdana, Arial, sans-serif; }
+.cert-cab { display: grid; grid-template-columns: 38mm 1fr auto; align-items: center; gap: 6mm; border-bottom: 2px solid #1d3d8f; padding-bottom: 4mm; }
+.cert-cab img { width: 38mm; }
+.cert-tit { text-align: center; font-weight: 700; font-size: 13pt; color: #1d3d8f; letter-spacing: .02em; }
+.cert-num { font-size: 11pt; color: #111; margin-top: 2mm; }
+.cert-copia { border: 1.5px solid #111; padding: 1.5mm 3mm; font-weight: 700; font-size: 9pt; }
+.cert-bloque { border: 1px solid #9aa6c4; margin-top: 5mm; padding: 2mm 4mm 3mm; }
+.cert-bloque h3 { margin: 0 0 2mm; font-size: 9pt; color: #1d3d8f; letter-spacing: .03em; }
+.cert-bloque dl { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 1mm 3mm; margin: 0; font-size: 9pt; }
+.cert-bloque dt { color: #1d3d8f; font-weight: 700; }
+.cert-bloque dd { margin: 0; }
+.cert-tabla { width: 100%; border-collapse: collapse; margin-top: 5mm; font-size: 7.5pt; table-layout: fixed; }
+.cert-tabla td, .cert-tabla th { overflow-wrap: anywhere; white-space: normal; vertical-align: bottom; }
+.cert-tabla td { vertical-align: top; }
+.cert-tabla th { background: #e9edf7; color: #1d3d8f; text-align: left; padding: 1.5mm 1.5mm; border-bottom: 1.5px solid #1d3d8f; font-style: italic; }
+.cert-tabla td { padding: 1.2mm 1.5mm; border-bottom: 1px solid #d5dae6; vertical-align: top; }
+.cert-tabla .n { text-align: right; white-space: nowrap; }
+.cert-tabla .cert-grupo td { font-weight: 700; background: #f6f7fb; }
+.cert-tabla tfoot td { border-top: 1.5px solid #1d3d8f; border-bottom: 0; padding-top: 2mm; }
+.cert-pie { margin-top: auto; padding-top: 10mm; font-size: 8.5pt; }
+.cert-lugar { text-align: center; font-style: italic; font-weight: 700; margin: 0 0 18mm; }
+.cert-firmas { display: flex; justify-content: space-around; margin-bottom: 8mm; }
+.cert-firmas span { border-top: 1px solid #111; padding-top: 1.5mm; width: 60mm; text-align: center; }
+.cert-datos { display: flex; justify-content: space-between; border-top: 2px solid #9aa6c4; padding-top: 2mm; color: #333; }
+@media print {
+  body.modo-certificado header.top, body.modo-certificado .no-imprimir, body.modo-certificado .bt-ayudante { display: none !important; }
+  body.modo-certificado { background: #fff; }
+  body.modo-certificado main { padding: 0; max-width: none; }
+  body.modo-certificado .cert-hojas { gap: 0; display: block; page: certificado; }
+  body.modo-certificado main { page: certificado; }
+  body.modo-certificado .cert-hoja { page: certificado; box-shadow: none; width: auto; min-height: 0; height: 266mm; overflow: hidden; padding: 0; break-after: page; }
+  body.modo-certificado .cert-hoja:last-child { break-after: auto; }
+}

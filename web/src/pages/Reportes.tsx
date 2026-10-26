@@ -10,8 +10,8 @@ import type { Paso } from '../lib/guias'
 
 const REPORTES: Record<string, [string, string]> = {
   producto: ['Cantidad por producto', 'Kilos y litros por corriente, por semana, quincena o mes.'],
-  provincial: ['Libro provincial', 'Movimientos de cada planta en el período, listo para rubricar.'],
-  nacional: ['Libro nacional', 'Manifiestos Nación con sus residuos y certificados.'],
+  provincial: ['Libro provincial', 'El libro rubricado de cada planta: con número de registro y las columnas del Access.'],
+  nacional: ['Libro nacional', 'El libro de manifiestos de Nación de cada planta: los viajes con certificado nacional.'],
   transporte: ['Libro de transporte', 'Retiros hechos por cada transportista.'],
   estadisticas: ['Estadísticas', 'Corrientes, generadores y destinos con más volumen.'],
 }
@@ -19,9 +19,9 @@ const REPORTES: Record<string, [string, string]> = {
 /** Qué explica Serquito de cada reporte (el "?" junto al título) */
 const QUE_ES: Record<string, string> = {
   producto: 'Suma lo retirado de cada corriente, por semana, quincena o mes, según la fecha del retiro. Se elige la unidad (kilos, litros o metros cúbicos) y se puede filtrar por planta o transportista. No cuentan los manifiestos anulados ni los formularios de viaje que el Access cargaba como retiro. Se exporta a Excel y, si está configurado, llega por mail cada lunes.',
-  provincial: 'Es el libro de movimientos de cada planta: un renglón por residuo, con generador, corriente, cantidad y en qué quedó. Se elige la planta y el período, y se imprime para rubricar o se exporta a Excel.',
-  nacional: 'Lista los Manifiestos Nación del período, es decir, los viajes al operador de disposición final, con los residuos que llevó cada uno y su certificado cuando ya volvió.',
-  transporte: 'Es el libro de cada transportista: todos los retiros que hizo en el período, con el camión, el chofer y lo que llevó.',
+  provincial: 'Es el libro rubricado de cada planta, igual al del Access: un renglón por residuo, numerado desde el número de registro que se indique, con generador, corriente, cantidad, recipiente, dominio, Manifiesto Nación, certificado y destino final. Tildando "Solo certificados nacionales" sale el libro detallado para Nación.',
+  nacional: 'Es el libro de manifiestos de Nación de cada planta: un renglón por viaje al operador de disposición final, numerado, con lo que llevó, el transporte y el operador con su CAA, y el certificado. Como en el Access, solo los viajes con certificado nacional.',
+  transporte: 'Es el libro de cada transportista: todos los retiros que hizo en el período, con el camión, el chofer, lo que llevó y el certificado.',
   estadisticas: 'Resume el período: cuántos manifiestos y generadores, cuánto se retiró, cómo se reparte entre sólidos, líquidos y barros, y quiénes concentran más volumen.',
 }
 
@@ -30,8 +30,8 @@ const inicioAnio = () => hoy().slice(0, 5) + '01-01'
 interface Op { id: number; nombre: string }
 
 /** Barra común: período, filtros propios de cada reporte y botones */
-function Barra({ desde, hasta, set, extra, onExcel, total }: {
-  desde: string; hasta: string; set: (d: string, h: string) => void; extra?: ReactNode; onExcel?: () => void; total?: string
+function Barra({ desde, hasta, set, extra, onExcel, onImprimir, total }: {
+  desde: string; hasta: string; set: (d: string, h: string) => void; extra?: ReactNode; onExcel?: () => void; onImprimir?: () => void; total?: string
 }) {
   return (
     <div className="bar no-imprimir">
@@ -41,7 +41,7 @@ function Barra({ desde, hasta, set, extra, onExcel, total }: {
       <span style={{ flex: 1 }} />
       {total && <span className="muted small">{total}</span>}
       {onExcel && <button onClick={onExcel} data-ayuda="rep-excel">Exportar a Excel</button>}
-      <button onClick={() => window.print()} data-ayuda="rep-imprimir">Imprimir</button>
+      <button onClick={() => { onImprimir?.(); window.print() }} data-ayuda="rep-imprimir">Imprimir</button>
     </div>
   )
 }
@@ -129,27 +129,56 @@ function PorProducto() {
   )
 }
 
-// ---------------------------------------------------------------- Libros provincial y de transporte
+// ---------------------------------------------------------------- Libros rubricados (como en el Access)
 interface Mov {
   id: number; numero: string; fecha: string; transportista: string; planta: string | null; generador: string; generador_cuit: string | null
   direccion_retiro: string | null; patente: string | null; chofer: string | null; corriente: string; contenedor: string | null
-  cantidad: number; um: UM; estado: string; nacion: string | null; certificado: string | null; certificado_fecha: string | null; operador: string | null
+  cantidad: number; um: UM; estado: string; nacion: string | null; nacion_fecha: string | null; certificado: string | null; certificado_fecha: string | null; operador: string | null
+  certificado_tipo: string | null; transportista_hab_nac: string | null; operador_hab_nac: string | null
   /** El formulario del viaje que el Access cargaba como retiro: va en el libro (es un formulario usado) pero no suma */
   formulario_viaje?: boolean
 }
-const SIN_CORTE = new Set(['Fecha', 'Manifiesto', 'CUIT', 'Manif. Nación', 'Certificado', 'Dominio', 'UM', 'Corriente', 'Estado'])
-const ESTADO: Record<string, string> = { almacenado: 'Almacenado', en_transito: 'En tránsito', disposicion_final: 'Dispuesto' }
-const cuitF = (c: string | null) => (c && /^\d{11}$/.test(c) ? `${c.slice(0, 2)}-${c.slice(2, 10)}-${c.slice(10)}` : c ?? '')
+type Fila<T> = T & { registro: number }
+const SIN_CORTE = new Set(['Nº', 'Fecha', 'Fecha de recepción', 'Nº manifiesto retiro', 'Manifiesto', 'Manif. Nación', 'Nº Manif. Nación', 'Fecha Manif. Nación', 'Certificado', 'Dominio', 'Dominio tpte. local', 'UM', 'Corriente'])
+const FECHAS = new Set(['Fecha', 'Fecha de recepción', 'Fecha Manif. Nación'])
+
+/** Número de registro del libro rubricado: arranca donde se le diga y sigue renglón por renglón (en el Access era
+ *  "NroRegistro"). Se recuerda en esta computadora el que sigue después de imprimir. */
+function useRegistro(clave: string) {
+  const leer = () => { try { return Number(localStorage.getItem(`libro-registro-${clave}`)) || 1 } catch { return 1 } }
+  const [inicial, setInicial] = useState(leer)
+  useEffect(() => { setInicial(leer()) }, [clave]) // eslint-disable-line react-hooks/exhaustive-deps
+  const guardarSiguiente = (n: number) => { try { localStorage.setItem(`libro-registro-${clave}`, String(n)) } catch { /* sin almacenamiento */ } }
+  return [inicial, setInicial, guardarSiguiente] as const
+}
+
+function CampoRegistro({ valor, set }: { valor: number; set: (n: number) => void }) {
+  return <label className="small" title="Número del primer renglón en el libro rubricado. Sigue renglón por renglón.">Nº de registro inicial <input type="number" min={1} value={valor} onChange={(e) => set(Math.max(1, Number(e.target.value) || 1))} style={{ width: 90 }} /></label>
+}
+
+function Tabla<T>({ cols, filas, clase }: { cols: Columna<T>[]; filas: T[]; clase?: (f: T) => string | undefined }) {
+  return (
+    <div className="tw"><table className="compacta">
+      <thead><tr>{cols.map((c) => <th key={c.t} style={['Vol./Peso', 'Cantidad', 'Kilos', 'Litros'].includes(c.t) ? { textAlign: 'right' } : undefined}>{c.t}</th>)}</tr></thead>
+      <tbody>{filas.map((f, i) => <tr key={i} className={clase?.(f)}>{cols.map((c) => {
+        const v = c.v(f)
+        return <td key={c.t} className={['Vol./Peso', 'Cantidad', 'Kilos', 'Litros'].includes(c.t) ? 'n' : SIN_CORTE.has(c.t) ? 'nw' : undefined}>
+          {FECHAS.has(c.t) ? (v ? fd(String(v)) : '') : typeof v === 'number' ? num(v) : v}</td>
+      })}</tr>)}</tbody>
+    </table></div>)
+}
 
 function LibroMovimientos({ tipo }: { tipo: 'provincial' | 'transporte' }) {
   const plantas = usePlantas()
   const [transportistas, setTransportistas] = useState<Op[]>([])
   const [d, setD] = useState(inicioMes()), [h, setH] = useState(hoy())
   const [filtro, setFiltro] = useState('')
+  const [nacion, setNacion] = useState(false)
   const [filas, setFilas] = useState<Mov[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const opciones = tipo === 'provincial' ? plantas : transportistas
+  const [inicial, setInicial, guardarSiguiente] = useRegistro(`${tipo}${nacion ? '-nacion' : ''}-${filtro}`)
 
   useEffect(() => {
     if (tipo === 'transporte') supabase.from('transportistas').select('id, nombre').order('nombre').then(({ data }) => setTransportistas(data ?? []))
@@ -163,85 +192,108 @@ function LibroMovimientos({ tipo }: { tipo: 'provincial' | 'transporte' }) {
     if (!filtro) return
     setCargando(true)
     const col = tipo === 'provincial' ? 'generador_principal_id' : 'transportista_id'
-    traerTodo<Mov>(() => supabase.from('libro_movimientos').select('*').eq(col, Number(filtro)).gte('fecha', d).lte('fecha', h)
-      .order('fecha').order('numero').order('id'))
-      .then(({ data, error }) => { setError(mensajeError(error)); setFilas(data); setCargando(false) })
-  }, [tipo, filtro, d, h])
+    traerTodo<Mov>(() => {
+      let c = supabase.from('libro_movimientos').select('*').eq(col, Number(filtro)).gte('fecha', d).lte('fecha', h)
+      if (tipo === 'provincial' && nacion) c = c.eq('certificado_tipo', 'N')
+      return c.order('fecha').order('numero').order('id')
+    }).then(({ data, error }) => { setError(mensajeError(error)); setFilas(data); setCargando(false) })
+  }, [tipo, filtro, d, h, nacion])
 
   const nombre = opciones.find((o) => String(o.id) === filtro)?.nombre ?? ''
-  const cols: Columna<Mov>[] = tipo === 'provincial' ? [
-    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.formulario_viaje ? `${f.generador} (formulario del viaje)` : f.generador },
-    { t: 'CUIT', v: (f) => cuitF(f.generador_cuit) }, { t: 'Transportista', v: (f) => f.transportista }, { t: 'Corriente', v: (f) => f.corriente },
-    { t: 'Cantidad', v: (f) => f.cantidad }, { t: 'UM', v: (f) => umL(f.um) }, { t: 'Estado', v: (f) => ESTADO[f.estado] },
-    { t: 'Manif. Nación', v: (f) => (f.nacion ? fnum(f.nacion) : '') }, { t: 'Operador', v: (f) => f.operador }, { t: 'Certificado', v: (f) => f.certificado },
+  const gen = (f: Mov) => f.formulario_viaje ? `${f.generador} (formulario del viaje)` : f.generador
+  const conReg: Fila<Mov>[] = filas.map((f, i) => ({ ...f, registro: inicial + i }))
+  // Las mismas columnas y en el mismo orden que el libro rubricado del Access
+  const cols: Columna<Fila<Mov>>[] = tipo === 'provincial' ? [
+    { t: 'Nº', v: (f) => f.registro }, { t: 'Fecha de recepción', v: (f) => f.fecha }, { t: 'Nº manifiesto retiro', v: (f) => fnum(f.numero) },
+    { t: 'Generador', v: gen }, { t: 'Corriente', v: (f) => f.corriente }, { t: 'Vol./Peso', v: (f) => f.cantidad }, { t: 'UM', v: (f) => umL(f.um) },
+    { t: 'Tipo de recipiente', v: (f) => f.contenedor }, { t: 'Dominio tpte. local', v: (f) => f.patente },
+    { t: 'Fecha Manif. Nación', v: (f) => f.nacion_fecha }, { t: 'Nº Manif. Nación', v: (f) => (f.nacion ? fnum(f.nacion) : '') },
+    { t: 'Certificado', v: (f) => f.certificado }, { t: 'Destino final', v: (f) => f.operador },
   ] : [
-    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.formulario_viaje ? `${f.generador} (formulario del viaje)` : f.generador },
+    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: gen },
     { t: 'Dirección de retiro', v: (f) => f.direccion_retiro }, { t: 'Dominio', v: (f) => f.patente }, { t: 'Chofer', v: (f) => f.chofer },
-    { t: 'Corriente', v: (f) => f.corriente }, { t: 'Contenedor', v: (f) => f.contenedor }, { t: 'Cantidad', v: (f) => f.cantidad },
-    { t: 'UM', v: (f) => umL(f.um) }, { t: 'Planta', v: (f) => f.planta },
+    { t: 'Corriente', v: (f) => f.corriente }, { t: 'Descripción', v: (f) => f.contenedor }, { t: 'Cantidad', v: (f) => f.cantidad },
+    { t: 'UM', v: (f) => umL(f.um) }, { t: 'Planta', v: (f) => f.planta }, { t: 'Certificado', v: (f) => f.certificado },
   ]
   const suman = filas.filter((f) => !f.formulario_viaje), formularios = filas.length - suman.length
   const totales = (['KGS', 'LTS', 'MS3'] as UM[]).map((u) => [u, suman.filter((f) => f.um === u).reduce((a, f) => a + f.cantidad, 0)] as const).filter(([, v]) => v)
+  const titulo = tipo === 'provincial' ? (nacion ? 'Libro rubricado detallado para Nación' : 'Libro rubricado') : 'Libro de manifiestos del transporte'
 
   return (
     <>
-      <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} total={`${num(filas.length)} residuos`}
-        onExcel={() => exportarExcel(`${REPORTES[tipo][0]} ${nombre} ${d} a ${h}`, cols, filas)}
-        extra={<select value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label={tipo === 'provincial' ? 'Planta' : 'Transportista'}>
-          {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}</select>} />
+      <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} total={`${num(filas.length)} renglones`}
+        onExcel={() => exportarExcel(`${titulo} ${nombre} ${d} a ${h}`, cols, conReg)}
+        onImprimir={tipo === 'provincial' ? () => guardarSiguiente(inicial + filas.length) : undefined}
+        extra={<>
+          <select value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label={tipo === 'provincial' ? 'Planta' : 'Transportista'}>
+            {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}</select>
+          {tipo === 'provincial' && <CampoRegistro valor={inicial} set={setInicial} />}
+          {tipo === 'provincial' && <label className="small"><input type="checkbox" checked={nacion} onChange={(e) => setNacion(e.target.checked)} /> Solo certificados nacionales</label>}
+        </>} />
       {error && <div className="aviso bad">{error}</div>}
       <div className="card libro">
-        <h2>{REPORTES[tipo][0]} · {nombre} · {fd(d)} al {fd(h)}</h2>
-        {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin movimientos en el período.</p> : (
-          <div className="tw"><table className="compacta">
-            <thead><tr>{cols.map((c) => <th key={c.t} style={c.t === 'Cantidad' ? { textAlign: 'right' } : undefined}>{c.t}</th>)}</tr></thead>
-            <tbody>{filas.map((f) => <tr key={f.id} className={f.formulario_viaje ? 'muted' : undefined}>{cols.map((c) => {
-              const v = c.v(f)
-              return <td key={c.t} className={c.t === 'Cantidad' ? 'n' : SIN_CORTE.has(c.t) ? 'nw' : undefined}>{c.t === 'Fecha' ? fd(String(v)) : typeof v === 'number' ? num(v) : v}</td>
-            })}</tr>)}</tbody>
-          </table></div>)}
+        <h2>{titulo} · {nombre} · {fd(d)} al {fd(h)}</h2>
+        {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin movimientos en el período.</p>
+          : <Tabla cols={cols} filas={conReg} clase={(f) => (f.formulario_viaje ? 'muted' : undefined)} />}
         {totales.length > 0 && <p style={{ marginBottom: 0 }}><b>Total:</b> {totales.map(([u, v]) => `${num(Math.round(v))} ${umL(u)}`).join(' · ')}{formularios > 0 && <span className="muted small"> · sin los {num(formularios)} renglones de formularios de viaje, que ya están en los manifiestos de los clientes</span>}</p>}
+        {tipo === 'provincial' && filas.length > 0 && <p className="small muted no-imprimir" style={{ marginBottom: 0 }}>Registros del {num(inicial)} al {num(inicial + filas.length - 1)}. Al imprimir, esta computadora recuerda que el próximo libro arranca en el {num(inicial + filas.length)}.</p>}
       </div>
     </>
   )
 }
 
-// ---------------------------------------------------------------- Libro nacional
+// ---------------------------------------------------------------- Libro Nación
 interface Nac { id: number; numero: string; fecha: string; operador: string | null; transportista: string | null; planta: string | null
-  residuos: number; corrientes: string | null; kgs: number | null; lts: number | null; certificados: string | null; certificado_fecha: string | null; cerrado: boolean | null }
+  residuos: number; corrientes: string | null; kgs: number | null; lts: number | null; certificados: string | null; certificado_fecha: string | null; cerrado: boolean | null
+  nacional: boolean; planta_hab_nac: string | null; transportista_hab_nac: string | null; operador_hab_nac: string | null; generador_principal_id: number | null }
 
 function LibroNacional() {
+  const plantas = usePlantas()
   const [d, setD] = useState(inicioMes()), [h, setH] = useState(hoy())
+  const [planta, setPlanta] = useState('')
+  const [soloNac, setSoloNac] = useState(true)
   const [filas, setFilas] = useState<Nac[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [inicial, setInicial, guardarSiguiente] = useRegistro(`nacion-${planta}`)
   useEffect(() => {
+    if (planta || !plantas.length) return
+    setPlanta(String((plantas.find((o) => o.nombre === 'SERCO AMBIENTAL SA') ?? plantas[0]).id))
+  }, [plantas, planta])
+  useEffect(() => {
+    if (!planta) return
     setCargando(true)
-    traerTodo<Nac>(() => supabase.from('libro_nacional').select('*').gte('fecha', d).lte('fecha', h).order('fecha').order('numero'))
-      .then(({ data, error }) => { setError(mensajeError(error)); setFilas(data); setCargando(false) })
-  }, [d, h])
-  const cols: Columna<Nac>[] = [
-    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manif. Nación', v: (f) => fnum(f.numero) }, { t: 'Operador', v: (f) => f.operador },
-    { t: 'Transportista', v: (f) => f.transportista }, { t: 'Planta', v: (f) => f.planta }, { t: 'Corrientes', v: (f) => f.corrientes },
-    { t: 'Kilos', v: (f) => f.kgs }, { t: 'Litros', v: (f) => f.lts }, { t: 'Certificado', v: (f) => f.certificados }, { t: 'Fecha certificado', v: (f) => f.certificado_fecha },
+    traerTodo<Nac>(() => {
+      let c = supabase.from('libro_nacional').select('*').eq('generador_principal_id', Number(planta)).gte('fecha', d).lte('fecha', h)
+      if (soloNac) c = c.eq('nacional', true)
+      return c.order('fecha').order('numero')
+    }).then(({ data, error }) => { setError(mensajeError(error)); setFilas(data); setCargando(false) })
+  }, [d, h, planta, soloNac])
+  const conReg: Fila<Nac>[] = filas.map((f, i) => ({ ...f, registro: inicial + i }))
+  const caa = (n: string | null, x: string | null) => [n, x ? `CAA ${x}` : ''].filter(Boolean).join(' · ')
+  const cols: Columna<Fila<Nac>>[] = [
+    { t: 'Nº', v: (f) => f.registro }, { t: 'Fecha', v: (f) => f.fecha }, { t: 'Nº Manif. Nación', v: (f) => fnum(f.numero) },
+    { t: 'Corriente', v: (f) => f.corrientes }, { t: 'Kilos', v: (f) => f.kgs ?? '' }, { t: 'Litros', v: (f) => f.lts ?? '' },
+    { t: 'Transporte', v: (f) => caa(f.transportista, f.transportista_hab_nac) }, { t: 'Destino final', v: (f) => caa(f.operador, f.operador_hab_nac) },
+    { t: 'Certificado', v: (f) => (f.certificados ? `${f.certificados} · ${fd(f.certificado_fecha)}` : 'Pendiente') },
   ]
+  const nombre = plantas.find((o) => String(o.id) === planta)?.nombre ?? ''
+  const caaPlanta = filas.find((f) => f.planta_hab_nac)?.planta_hab_nac
   return (
     <>
       <Barra desde={d} hasta={h} set={(a, b) => { setD(a); setH(b) }} total={`${num(filas.length)} Manifiestos Nación`}
-        onExcel={() => exportarExcel(`Libro nacional ${d} a ${h}`, cols, filas)} />
+        onExcel={() => exportarExcel(`Libro de manifiestos de Nación ${nombre} ${d} a ${h}`, cols, conReg)} onImprimir={() => guardarSiguiente(inicial + filas.length)}
+        extra={<>
+          <select value={planta} onChange={(e) => setPlanta(e.target.value)} aria-label="Planta">{plantas.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}</select>
+          <CampoRegistro valor={inicial} set={setInicial} />
+          <label className="small"><input type="checkbox" checked={soloNac} onChange={(e) => setSoloNac(e.target.checked)} /> Solo con certificado nacional</label>
+        </>} />
       {error && <div className="aviso bad">{error}</div>}
       <div className="card libro">
-        <h2>Libro nacional · {fd(d)} al {fd(h)}</h2>
-        {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin Manifiestos Nación en el período.</p> : (
-          <div className="tw"><table className="compacta">
-            <thead><tr><th>Fecha</th><th>Manif. Nación</th><th>Operador</th><th>Transportista</th><th>Corrientes</th>
-              <th style={{ textAlign: 'right' }}>Kilos</th><th style={{ textAlign: 'right' }}>Litros</th><th>Certificado</th></tr></thead>
-            <tbody>{filas.map((f) => (
-              <tr key={f.id}><td className="nw">{fd(f.fecha)}</td><td className="nw"><b>{fnum(f.numero)}</b></td><td>{f.operador ?? '—'}</td><td>{f.transportista ?? '—'}</td>
-                <td>{f.corrientes}</td><td className="n">{f.kgs ? num(f.kgs) : ''}</td><td className="n">{f.lts ? num(f.lts) : ''}</td>
-                <td className="nw">{f.certificados ? `${f.certificados} · ${fd(f.certificado_fecha)}` : <span className="pill haz">Pendiente</span>}</td></tr>))}
-            </tbody>
-          </table></div>)}
+        <h2>Libro de manifiestos de Nación · {nombre}{caaPlanta ? ` (CAA ${caaPlanta})` : ''} · {fd(d)} al {fd(h)}</h2>
+        {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin Manifiestos Nación en el período{soloNac ? ' con certificado nacional' : ''}.</p>
+          : <Tabla cols={cols} filas={conReg} />}
+        <p className="small muted no-imprimir" style={{ marginBottom: 0 }}>Un renglón por viaje, con los kilos y litros de los manifiestos de los clientes. Como en el Access, el libro Nación lista solo los viajes con certificado nacional (se puede destildar).</p>
       </div>
     </>
   )

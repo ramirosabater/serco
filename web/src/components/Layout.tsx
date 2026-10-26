@@ -66,11 +66,12 @@ export default function Layout() {
       { to: '/manifiestos', b: 'Buscar manifiestos', s: 'Recorrido de cada residuo' },
       { to: '/agenda', b: 'Agenda', s: 'Retiros y vencimientos del mes' },
     ] },
-    { t: 'Planta', base: ['/planta', '/nacion'], n: esperando + porIngresar, items: [
+    { t: 'Planta', base: ['/planta', '/nacion', '/certificados-serco'], n: esperando + porIngresar, items: [
       { to: '/planta?v=ingresar', b: 'Por ingresar', s: 'Cargar los residuos que llegan (sección 3)', n: porIngresar },
       { to: '/planta', b: 'Armar viajes', s: 'Lo almacenado, en viajes a disposición final' },
       { to: '/planta?v=transito', b: 'Esperando certificado', s: 'Registrar el certificado del operador', n: esperando },
       { to: '/planta?v=nacion', b: 'Manifiestos Nación', s: 'Todos los envíos y sus certificados' },
+      { to: '/certificados-serco', b: 'Certificados de Serco', s: 'El certificado numerado para cada generador' },
     ] },
     { t: 'Reportes', base: ['/reportes'], items: [
       { to: '/reportes/producto', b: 'Cantidad por producto', s: 'Semanal, quincenal o mensual' },

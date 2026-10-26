@@ -147,7 +147,10 @@ export default function NacionDetalle() {
                   <dt>Fecha</dt><dd>{fd(c.fecha)}</dd>
                   {c.tipo_tratamiento && <><dt>Tratamiento</dt><dd>{c.tipo_tratamiento}</dd></>}
                 </dl>
-                {c.archivo && <button className="mt" onClick={() => abrirArchivo(c.archivo, setError)}>Ver PDF del certificado</button>}
+                <div className="bar mt" style={{ marginBottom: 0 }}>
+                  {c.archivo && <button onClick={() => abrirArchivo(c.archivo, setError)}>Ver PDF del certificado</button>}
+                  {perfil?.rol !== 'cliente' && <Link to={`/certificados-serco?cert=${c.id}`}><button>Certificados de Serco para los generadores</button></Link>}
+                </div>
               </div>))}
             {pendiente && certs.length > 0 && <p className="muted small">Hay residuos de este viaje que todavía esperan certificado.</p>}
           </div>
