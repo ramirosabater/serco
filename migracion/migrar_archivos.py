@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""
-SGRP 2.0 · Migración de archivos (carpeta RAYGROUP → Supabase Storage) · borrador v0.1
+r"""
+Gestión Serco · Migración de archivos del Access (carpetas de RAYGROUP) al Google Drive de Serco.
 
-Se corre después de migrar.py. Regla de Serco: una carpeta por tipo de documento y
-el archivo se llama con el número único del documento. Por eso cada documento se busca
-primero por la ruta que guardó el Access y, si no está, por su número.
+Regla de Serco: una carpeta por tipo de documento y el archivo se llama con el número único del documento.
+Cada documento se busca primero por la ruta que guardó el Access y, si no está, por su número.
+Se le pueden pasar varias carpetas: se busca en el orden dado (primero la copia más nueva).
 
-Uso:
-    export DATABASE_URL="postgresql://postgres:<clave>@<host>:5432/postgres"
-    python migrar_archivos.py ruta/a/RAYGROUP                 # solo revisa e informa (no sube nada)
+En PowerShell, en C:\Apps\sgrp2\migracion:
+    python migrar_archivos.py "C:\serco 26102026" "C:\RAYGROUP"            # solo revisa e informa (no sube nada)
+    python migrar_archivos.py "C:\serco 26102026" "C:\RAYGROUP" --drive    # sube al Drive y anota en la base
 
-    export SUPABASE_URL="https://<proyecto>.supabase.co"
-    export SUPABASE_SERVICE_KEY="<service_role key>"
-    python migrar_archivos.py ruta/a/RAYGROUP --subir         # sube y actualiza las rutas en la base
-
+Pide la dirección de la base (Supabase → Connect → Session pooler) sin mostrarla, o la toma de SGRP_DB.
+--drive necesita migracion/.env.drive (lo arma autorizar_drive.py).
 Se puede cortar y volver a correr: lo que ya está subido no se vuelve a subir.
 """
 import mimetypes, os, re, sys, json
@@ -44,16 +42,20 @@ def sin_ext(nombre):
 
 
 class Indice:
-    """Todos los archivos de la copia de RAYGROUP, por carpeta y por nombre sin extensión."""
-    def __init__(self, raiz):
-        self.raiz = Path(raiz)
+    """Todos los archivos de las copias de RAYGROUP, por carpeta y por nombre sin extensión."""
+    def __init__(self, raices):
+        self.raices = [Path(r) for r in raices]
         self.por_nombre = defaultdict(lambda: defaultdict(list))   # carpeta → nombre → [rutas]
         self.por_numero = defaultdict(lambda: defaultdict(list))   # carpeta → número (al final del nombre) → [rutas]
         self.usados = set()
         self.total = 0
-        for f in self.raiz.rglob('*'):
-            if not f.is_file(): continue
-            rel = f.relative_to(self.raiz)
+        vistos = set()
+        for raiz in self.raices:
+          for f in raiz.rglob('*'):
+            if not f.is_file() or f.name.lower() in ('thumbs.db', 'desktop.ini'): continue
+            rel = f.relative_to(raiz)
+            if str(rel).lower() in vistos: continue            # el mismo archivo en una copia más vieja: manda la primera
+            vistos.add(str(rel).lower())
             carpeta = rel.parts[0].lower() if len(rel.parts) > 1 else ''
             base, _ = sin_ext(f.name)
             self.por_nombre[carpeta][base.lower()].append(f)
@@ -64,6 +66,12 @@ class Indice:
     @staticmethod
     def mejor(candidatos):
         return sorted(candidatos, key=lambda f: (PREFERENCIA.index(f.suffix.lower()) if f.suffix.lower() in PREFERENCIA else 99, -f.stat().st_size))[0]
+
+    def relativo(self, f):
+        for r in self.raices:
+            try: return str(f.relative_to(r))
+            except ValueError: pass
+        return str(f)
 
     def buscar(self, carpeta, nombre=None, numero=None):
         c = (carpeta or '').lower()
@@ -83,28 +91,26 @@ class Indice:
         return None, None
 
 
-class Subida:
-    def __init__(self, url, key):
-        import requests
-        self.s = requests.Session()
-        self.s.headers.update({'Authorization': f'Bearer {key}', 'apikey': key, 'x-upsert': 'true'})
-        self.base = url.rstrip('/') + '/storage/v1/object/documentos/'
-
-    def subir(self, local, destino):
-        tipo = mimetypes.guess_type(str(local))[0] or 'application/octet-stream'
-        with open(local, 'rb') as fh:
-            r = self.s.post(self.base + destino, data=fh, headers={'Content-Type': tipo}, timeout=300)
-        if r.status_code >= 300:
-            raise RuntimeError(f'{r.status_code} {r.text[:200]}')
+def pedir_direccion():
+    import getpass
+    d = os.environ.get('SGRP_DB') or os.environ.get('DATABASE_URL')
+    if d: return d
+    print('Pegá la dirección de la base (Supabase → Connect → Session pooler, con tu contraseña). No se muestra mientras la pegás.')
+    d = getpass.getpass('Dirección: ').strip()
+    if not d.startswith(('postgresql://', 'postgres://')): sys.exit('Eso no parece una dirección de Supabase: tiene que empezar con postgresql://')
+    return d
 
 
 def main():
-    if len(sys.argv) < 2 or not os.environ.get('DATABASE_URL'):
-        sys.exit(__doc__)
-    raiz, subir = sys.argv[1], '--subir' in sys.argv
-    db = psycopg2.connect(os.environ['DATABASE_URL']); cur = db.cursor()
-    idx = Indice(raiz)
-    print(f'Archivos en la copia de RAYGROUP: {idx.total}')
+    raices = [a for a in sys.argv[1:] if not a.startswith('--')]
+    if not raices: sys.exit(__doc__)
+    for r in raices:
+        if not os.path.isdir(r): sys.exit(f'No encuentro la carpeta {r}')
+    a_drive = '--drive' in sys.argv
+    db = psycopg2.connect(pedir_direccion(), connect_timeout=20); cur = db.cursor()
+    print('Buscando los archivos en ' + ', '.join(raices) + '…')
+    idx = Indice(raices)
+    print(f'Archivos encontrados: {idx.total}')
 
     # (tabla, columna, id, número, operador, ruta del Access, tipo)
     docs = []
@@ -122,13 +128,15 @@ def main():
                         'generadores_principales': ['hab_nac_archivo', 'hab_pro_archivo', 'hab_mun_archivo'],
                         'operadores': ['hab_nac_archivo', 'hab_pro_archivo', 'hab_mun_archivo']}.items():
         for col in cols:
+            cur.execute("select 1 from information_schema.columns where table_name = %s and column_name = %s", (tabla, col))
+            if not cur.fetchone(): continue
             cur.execute(f"select id, {col} from {tabla} where {col} is not null")
             docs += [(tabla, col, i, None, None, r, 'habilitacion') for i, r in cur.fetchall()]
 
     plan, faltan, resumen = [], [], defaultdict(lambda: defaultdict(int))
     for tabla, col, i, numero, op, ruta, tipo in docs:
-        if ruta and '/' in ruta and not ruta.startswith('\\'):
-            resumen[tipo]['ya_en_storage'] += 1; continue        # corrida anterior
+        if ruta and (ruta.startswith('drive:') or ('/' in ruta and not ruta.startswith('\\'))):
+            resumen[tipo]['ya_subido'] += 1; continue           # corrida anterior, o cargado desde el sistema nuevo
         carpeta, nombre = partes_ruta(ruta)
         if tipo != 'habilitacion' and not carpeta:
             carpeta = {'manifiesto': 'Manifiestos', 'nacion': 'ManifiestosNacion', 'certificado': 'CertDispFinal'}[tipo]
@@ -137,7 +145,7 @@ def main():
             resumen[tipo]['no_encontrado'] += 1
             faltan.append((tabla, i, numero, ruta)); continue
         idx.usados.add(local)
-        ext = local.suffix.lstrip('.') or 'pdf'
+        ext = local.suffix.lstrip('.').lower() or 'pdf'
         if tipo == 'habilitacion':
             destino = f"habilitaciones/{(carpeta or 'otros').lower()}/{re.sub(r'[^A-Za-z0-9._-]+', '_', local.name)}"
         else:
@@ -150,45 +158,61 @@ def main():
     for tabla, col, i, ruta, local, destino, como in plan:
         if ruta:
             cur.execute("""update migracion_archivos set encontrado = true, archivo_local = %s, como = %s,
-                           storage_path = %s, bytes = %s where ruta_access = %s""",
-                        (str(local.relative_to(idx.raiz)), como, destino, local.stat().st_size, ruta))
+                           bytes = %s where ruta_access = %s and subido is null""",
+                        (idx.relativo(local), como, local.stat().st_size, ruta))
     db.commit()
 
-    huerfanos = sorted(str(f.relative_to(idx.raiz)) for c in idx.por_nombre.values() for l in c.values() for f in l if f not in idx.usados)
+    huerfanos = sorted(idx.relativo(f) for c in idx.por_nombre.values() for l in c.values() for f in l if f not in idx.usados)
     total_bytes = sum(p[4].stat().st_size for p in plan)
     informe = {'documentos': len(docs), 'a_subir': len(plan), 'gb': round(total_bytes / 1e9, 2),
                'por_tipo': {k: dict(v) for k, v in resumen.items()}, 'archivos_sin_documento': len(huerfanos)}
     print(json.dumps(informe, indent=2, ensure_ascii=False))
     Path('archivos_no_encontrados.csv').write_text('tabla;id;numero;ruta_access\n' + '\n'.join(f'{a};{b};{c or ""};{d or ""}' for a, b, c, d in faltan), encoding='utf-8')
     Path('archivos_sin_documento.txt').write_text('\n'.join(huerfanos), encoding='utf-8')
-    print('Detalle: archivos_no_encontrados.csv y archivos_sin_documento.txt')
+    print('Detalle: archivos_no_encontrados.csv y archivos_sin_documento.txt (en esta carpeta; no van a GitHub)')
 
-    if not subir:
-        print('Modo revisión: no se subió nada. Agregá --subir para subir al Storage.'); return
+    if not a_drive:
+        print('Modo revisión: no se subió nada. Agregá --drive para subir al Google Drive de Serco.'); return
 
-    up = Subida(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_KEY'])
-    cur.execute('select storage_path from migracion_archivos where subido is not null')
-    ya = {r[0] for r in cur.fetchall()}
-    pendientes = {}
-    for p in plan:                                             # un archivo puede servir a varios documentos
-        if p[5] not in ya: pendientes[p[5]] = p[4]
-    errores, hechos = [], set()
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        fut = {ex.submit(up.subir, local, destino): destino for destino, local in pendientes.items()}
+    from drive_google import Carpetas, Drive, leer_claves
+    claves = leer_claves()
+    d = Drive(claves)
+    carpetas = Carpetas(d, db, claves['DRIVE_CARPETA'])
+    pendientes = {}                                            # un archivo puede servir a varios documentos
+    for p in plan: pendientes.setdefault(p[5], p[4])
+    por_destino = defaultdict(list)
+    for p in plan: por_destino[p[5]].append(p)
+
+    def subir(destino, local):
+        ruta_carpeta, _, nombre = destino.rpartition('/')
+        mime = mimetypes.guess_type(str(local))[0] or 'application/octet-stream'
+        return 'drive:' + d.subir(nombre, carpetas.id(ruta_carpeta), str(local), mime)
+
+    errores, hechos, t0 = [], 0, __import__('time').time()
+    bytes_hechos = 0
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        fut = {ex.submit(subir, destino, local): destino for destino, local in pendientes.items()}
         for n, f in enumerate(as_completed(fut), 1):
-            d = fut[f]
-            try: f.result(); hechos.add(d)
-            except Exception as e: errores.append((d, str(e)))
-            if n % 500 == 0: print(f'  {n}/{len(fut)} subidos')
-    hechos |= ya
-    for tabla, col, i, ruta, local, destino, como in plan:
-        if destino in hechos:
-            cur.execute(f'update {tabla} set {col} = %s where id = %s', (destino, i))
-            if ruta: cur.execute('update migracion_archivos set subido = coalesce(subido, now()) where ruta_access = %s', (ruta,))
+            destino = fut[f]
+            try:
+                guardado = f.result()
+            except Exception as e:
+                errores.append((destino, str(e))); continue
+            # Se anota apenas sube: si se corta, lo subido no se vuelve a subir
+            for tabla, col, i, ruta, local, _, _ in por_destino[destino]:
+                cur.execute(f'update {tabla} set {col} = %s where id = %s', (guardado, i))
+                if ruta: cur.execute('update migracion_archivos set storage_path = %s, subido = coalesce(subido, now()) where ruta_access = %s', (guardado, ruta))
+            hechos += 1; bytes_hechos += pendientes[destino].stat().st_size
+            if n % 50 == 0 or n == len(fut):
+                db.commit()
+                seg = __import__('time').time() - t0
+                falta = (total_bytes - bytes_hechos) / (bytes_hechos / seg) if bytes_hechos else 0
+                print(f'  {n}/{len(fut)} · {bytes_hechos / 1e9:.2f} de {total_bytes / 1e9:.2f} GB · faltan unos {falta / 60:.0f} min')
     db.commit()
-    print(f'Subidos: {len(hechos) - len(ya)} · errores: {len(errores)}')
+    print(f'Subidos: {hechos} · errores: {len(errores)}')
     if errores:
         Path('archivos_con_error.txt').write_text('\n'.join(f'{d}: {e}' for d, e in errores), encoding='utf-8')
+        print('Los errores están en archivos_con_error.txt: volvé a correr el mismo comando y reintenta solo esos.')
 
 
 if __name__ == '__main__':

@@ -20,3 +20,15 @@ test('planta: por ingresar, armar carga, esperando certificado y Manifiestos Nac
   await expect(page.getByText(/Manifiestos Nación$/).first()).toBeVisible()
   await sinAvisoDeError(page)
 })
+
+// El viaje (Manifiesto Nación) se imprime en el mismo formulario azul: solo mira, no imprime ni guarda
+test('viaje: imprimir en el formulario azul', async ({ page }) => {
+  await page.goto('/planta?v=nacion')
+  await page.locator('tr.fila').first().click()
+  await expect(page).toHaveURL(/\/nacion\/\d+$/)
+  await page.getByRole('button', { name: /formulario azul/ }).click()
+  await expect(page).toHaveURL(/\/nacion\/\d+\/imprimir$/)
+  await expect(page.getByRole('heading', { name: /Imprimir viaje/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Volver al Manifiesto Nación' })).toBeVisible()
+  await sinAvisoDeError(page)
+})

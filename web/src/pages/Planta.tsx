@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
+import { subirArchivo } from '../lib/archivos'
 import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { UM } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
@@ -63,6 +64,8 @@ function ArmarCarga() {
   const [modo, setModo] = useState<'plan' | 'mano'>('plan')
   const [omitir, setOmitir] = useState('')
   const [modal, setModal] = useState(false)
+  const [sugerido, setSugerido] = useState('')
+  const [armado, setArmado] = useState<number | null>(null)
 
   useEffect(() => {
     supabase.from('generadores_principales').select('id, nombre').eq('activo', true).order('nombre').then(({ data }) => {
@@ -98,7 +101,12 @@ function ArmarCarga() {
       .then(({ data }) => setCamiones((data ?? []).map((c) => ({ id: c.id, nombre: c.patente, capacidad: c.capacidad, capacidad_um: c.capacidad_um }))))
     supabase.from('choferes').select('id, nombre').eq('transportista_id', t).eq('activo', true).order('nombre')
       .then(({ data }) => setChoferes((data ?? []) as Flota[]))
-  }, [form.transportista])
+    // El viaje va en el mismo formulario azul de los retiros: se sugiere el número que sigue del talonario
+    supabase.rpc('sugerir_numero', { p_transportista: t }).then(({ data }) => {
+      const n = (data as string) ?? ''
+      setSugerido(n); setForm((f) => (f.numero ? f : { ...f, numero: n }))
+    })
+  }, [form.transportista, armado])
 
   const elegidos = filas.filter((f) => sel.has(f.id))
   const corrientesSel = useMemo(() => [...new Set(elegidos.map((f) => f.corriente_id))], [elegidos])
@@ -143,7 +151,8 @@ function ArmarCarga() {
     setEnviando(false)
     if (error) { setError(mensajeError(error)); return }
     setOk(`Manifiesto Nación ${fnum(form.numero)} armado con ${elegidos.length} residuos. Quedan en tránsito hasta que llegue el certificado.`)
-    setForm((f) => ({ ...f, numero: '' })); setModal(false); cargar(); void data
+    setArmado(data as number)
+    setForm((f) => ({ ...f, numero: '' })); setModal(false); cargar()
   }
 
   const fueraPlazo = filas.filter((f) => f.dias_restantes < 0).length
@@ -161,8 +170,9 @@ function ArmarCarga() {
       </div>
       {grupos.length > 1 && <div className="aviso bad">Hay residuos de grupos que no pueden viajar juntos: {grupos.join(', ')}.</div>}
       {excede && <div className="aviso haz">Se pasa de la capacidad del camión ({num(camion!.capacidad!)} kg).</div>}
-      <label className="campo">Número del Manifiesto Nación
-        <input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required inputMode="numeric" placeholder="Del formulario verde" />
+      <label className="campo">Número del formulario
+        <input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required inputMode="numeric" placeholder="837007470" />
+        <span className="ayuda">{sugerido ? `Es el mismo formulario azul de los retiros: el siguiente es ${fnum(sugerido)}. Revisá que coincida con el papel.` : 'El mismo formulario azul de los retiros, con el número que sigue.'}</span>
       </label>
       <label className="campo">Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required /></label>
       <label className="campo">Operador de disposición final
@@ -204,7 +214,7 @@ function ArmarCarga() {
         <span className="muted small">{filas.length} residuos almacenados{fueraPlazo ? `, ${fueraPlazo} fuera de plazo` : ''}</span>
       </div>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
-      {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok} <Link to="/planta?v=transito">Ver en tránsito</Link></div>}
+      {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok} {armado && <><Link to={`/nacion/${armado}/imprimir`}><b>Imprimir en el formulario azul</b></Link> · </>}<Link to="/planta?v=transito">Ver en tránsito</Link></div>}
       <nav className="bar" aria-label="Cómo armar la carga">
         <span className="pestanas">
           <button type="button" className={modo === 'plan' ? 'on' : ''} onClick={() => setModo('plan')} data-ayuda="pl-tab-plan">Cargas sugeridas</button>
@@ -306,9 +316,9 @@ function EnTransitoLista() {
     if (archivo) {
       const ext = (archivo.name.split('.').pop() || 'pdf').toLowerCase()
       const { data: r } = await supabase.rpc('ruta_documento', { tipo: 'certificado', numero: cert.numero.trim(), operador_id: n.operador_id, ext })
-      ruta = r as string
-      const { error } = await supabase.storage.from('documentos').upload(ruta, archivo, { upsert: true, contentType: archivo.type || undefined })
-      if (error) { setError('No se pudo subir el PDF del certificado: ' + mensajeError(error)); setEnviando(false); return }
+      const subido = await subirArchivo(r as string, archivo)
+      if (subido.error || !subido.guardado) { setError('No se pudo subir el PDF del certificado: ' + (subido.error ?? 'sin respuesta')); setEnviando(false); return }
+      ruta = subido.guardado
     }
     const { error } = await supabase.rpc('registrar_certificado', {
       p_numero: cert.numero.trim(), p_fecha: cert.fecha, p_nacion: n.id, p_items: null, p_archivo: ruta, p_tipo_tratamiento: cert.tratamiento || null,

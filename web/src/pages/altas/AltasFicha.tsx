@@ -5,6 +5,7 @@ import { entidad, estadoVto, ETIQUETA_ESTADO, type Campo, type Documento, type E
 import { cuitValido, soloDigitos } from '../../lib/cuit'
 import { fd } from '../../lib/formato'
 import { leerCertificado, NOMBRE_TIPO } from '../../lib/leerCertificado'
+import { abrirArchivo, subirArchivo } from '../../lib/archivos'
 import { useAuth } from '../../auth/AuthProvider'
 import { MenuAltas } from './AltasLista'
 import CorrientesHabilitadas from '../../components/CorrientesHabilitadas'
@@ -105,9 +106,8 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
     }
     setSubiendo(true)
     const ext = (f.name.split('.').pop() || 'pdf').toLowerCase()
-    const ruta = `habilitaciones/${tabla}/${id}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('documentos').upload(ruta, f, { upsert: false, contentType: f.type || undefined })
-    if (error) { onError('No se pudo subir el archivo: ' + mensajeError(error)); setSubiendo(false); return }
+    const { guardado: ruta, error } = await subirArchivo(`habilitaciones/${tabla}/${id}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`, f)
+    if (error || !ruta) { onError('No se pudo subir el archivo: ' + (error ?? 'sin respuesta')); setSubiendo(false); return }
     // El archivo y lo leído del certificado (vencimiento, DNI) se graban juntos
     const cambios: Valores = { [d.archivo]: ruta, ...leido }
     const { error: e2 } = await supabase.from(tabla).update(cambios).eq('id', id)
@@ -121,12 +121,7 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
     setLectura({ ok: true, t: dniFicha ? `DNI ${dniFicha} copiado: en la página que se abrió, pegalo (Ctrl+V), tildá "No soy un robot", bajá el certificado y subilo acá.` : 'Cargá el DNI del chofer en Datos para que se copie solo.' })
   }
 
-  async function ver() {
-    if (!archivo) return
-    if (archivo.startsWith('\\') || /^[A-Z]:\\/i.test(archivo)) { onError('Este archivo todavía está en la PC del Access: se copia en la migración de archivos.'); return }
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(archivo, 300)
-    if (error || !data) onError('No se pudo abrir el archivo: ' + mensajeError(error)); else window.open(data.signedUrl, '_blank', 'noopener')
-  }
+  function ver() { abrirArchivo(archivo, onError) }
 
   return (
     <>

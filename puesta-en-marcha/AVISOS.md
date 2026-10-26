@@ -37,9 +37,11 @@ En PowerShell, en `C:\Apps\sgrp2`:
    Cuando el dominio esté verificado, se vuelve a correr solo con el `MAIL_DE` nuevo.
 4. Publicá las tres funciones:
    ```
-   npx supabase functions deploy avisos usuarios certificado-chofer --project-ref REF --use-api
+   npx supabase functions deploy avisos usuarios --project-ref REF --use-api
+   npx supabase functions deploy certificado-chofer archivos --project-ref REF --use-api --no-verify-jwt
    ```
-   Tiene que terminar con `Deployed Functions on project REF: avisos, usuarios, certificado-chofer`.
+   La segunda línea lleva `--no-verify-jwt` porque esas dos funciones las abren choferes sin usuario o enlaces firmados:
+   ellas mismas controlan quién llama. Cada línea termina con `Deployed Functions on project REF: …`.
 
 ## 3. Mails de usuarios: invitaciones y "olvidé mi contraseña" · 10 min
 

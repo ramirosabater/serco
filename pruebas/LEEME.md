@@ -13,6 +13,7 @@ Abren el sistema en un navegador y recorren lo importante solas. En un par de mi
 | 07 Sugerencias | Que las reglas respondan en cada pantalla; la tarjeta, "Ahora no", "No me lo preguntes más" (queda guardado) y "Como siempre" |
 | 08 Pedido de certificados | La página que abre el chofer (lee el certificado, controla el DNI, enlace vencido) y la revisión en Vencimientos. No manda mails: el servidor se reemplaza por respuestas de prueba |
 | 09 Explicaciones | El "?" de los números del tablero y los reportes, y "Explicame el tablero / las estadísticas" (que encuentre cada cosa que explica) |
+| 10 Archivos | Subir un escaneo en una ficha y verlo (con el servidor de archivos simulado: no sube nada al Drive de Serco) |
 
 La prueba 02 usa siempre el transportista y el generador **PRUEBA AUTOMATICA**, con formulario rosa: no toca la numeración del formulario azul ni datos reales, y el manifiesto queda anulado al terminar (no cuenta en el tablero ni en los reportes).
 
@@ -35,7 +36,7 @@ En `C:\Apps\sgrp2\pruebas`:
 npm.cmd run probar
 ```
 
-- Todo bien: termina con `30 passed`.
+- Todo bien: termina con `31 passed`.
 - Si algo falla, dice cuál prueba y por qué. Para ver la captura y el paso a paso: `npm.cmd run informe`.
 - Para mirar cómo trabaja el navegador: `npm.cmd run ver`.
 

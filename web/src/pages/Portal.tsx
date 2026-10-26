@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
+import { abrirArchivo } from '../lib/archivos'
 import { ETAPAS, etapaManifiesto, fd, fnum, num, umL } from '../lib/formato'
 import type { Manifiesto } from '../lib/tipos'
 import { colorEtapa, MiniEtapa, PillEtapa } from '../components/Etapa'
@@ -153,8 +154,7 @@ export function PortalCertificados() {
   async function descargar(c: Cert) {
     setError('')
     if (!c.archivo || c.archivo.startsWith('\\')) { setError(`El PDF del certificado ${c.numero} todavía no está disponible. Pedilo a Serco.`); return }
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(c.archivo, 300, { download: `Certificado ${c.numero}.pdf` })
-    if (error || !data) setError('No se pudo descargar: ' + mensajeError(error)); else window.location.href = data.signedUrl
+    await abrirArchivo(c.archivo, setError, `Certificado ${c.numero}.pdf`)
   }
 
   return (

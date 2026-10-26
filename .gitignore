@@ -26,3 +26,9 @@ esperado-*.json
 validacion-*.xlsx
 novedades-*.sql.gz
 novedades-*.txt
+
+# Migración de archivos: listados con nombres de documentos de Serco
+archivos_no_encontrados.csv
+archivos_sin_documento.txt
+archivos_con_error.txt
+client_secret_*.json

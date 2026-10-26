@@ -6,7 +6,10 @@ import { fd, fnum, num, umL } from '../lib/formato'
 import type { Instrucciones, UM } from '../lib/tipos'
 import { instruccionesPorDefecto } from '../lib/instrucciones'
 
-// Impresión sobre el formulario azul preimpreso de la Provincia (manifiesto de retiro).
+// Impresión sobre el formulario azul preimpreso de la Provincia: el manifiesto de retiro y también el viaje
+// a disposición final (Manifiesto Nación), que va en el mismo formulario con el número que sigue del talonario.
+// En el viaje: el generador es la planta de Serco desde donde sale, el destino es el operador y los residuos
+// se suman por corriente.
 // Posiciones en milímetros, medidas sobre el formulario original escaneado (Manifiesto_Serco_Escaneado.pdf).
 // Lo preimpreso (número, transportista Serco Ambiental, títulos) NO se imprime.
 
@@ -28,6 +31,42 @@ const SELECT = `id, numero, fecha, tipo, anulado, direccion_retiro, instruccione
   camiones(patente, tipo, carga_pel_nro, carga_pel_vto),
   choferes(nombre, carnet_nro, carga_pel_vto),
   manifiesto_items(id, contenedor, cant_estimada, cantidad, um, corrientes(codigo, descripcion, estado_fisico))`
+
+const SELECT_VIAJE = `id, numero, fecha,
+  generadores_principales(nombre, cuit, direccion, ciudad, hab_mun_nro, hab_mun_vto),
+  operadores(nombre, cuit, hab_pro_nro, hab_pro_vto),
+  transportistas(nombre, hab_pro_vto),
+  camiones(patente, tipo, carga_pel_nro, carga_pel_vto),
+  choferes(nombre, carnet_nro, carga_pel_vto),
+  manifiesto_items(id, contenedor, cantidad, um, corrientes(codigo, descripcion, estado_fisico))`
+
+interface Viaje {
+  id: number; numero: string; fecha: string
+  generadores_principales: { nombre: string; cuit: string | null; direccion: string | null; ciudad: string | null; hab_mun_nro: string | null; hab_mun_vto: string | null } | null
+  operadores: { nombre: string; cuit: string | null; hab_pro_nro: string | null; hab_pro_vto: string | null } | null
+  transportistas: Datos['transportistas']; camiones: Datos['camiones']; choferes: Datos['choferes']
+  manifiesto_items: { id: number; contenedor: string | null; cantidad: number; um: UM; corrientes: { codigo: string; descripcion: string | null; estado_fisico: string | null } | null }[]
+}
+
+/** El viaje, puesto en la forma de un manifiesto para el mismo formulario: residuos sumados por corriente y unidad */
+function viajeComoManifiesto(v: Viaje): Datos {
+  const grupos = new Map<string, Datos['manifiesto_items'][number] & { contenedores: Set<string> }>()
+  for (const i of v.manifiesto_items) {
+    const k = `${i.corrientes?.codigo}|${i.um}`
+    const g = grupos.get(k) ?? { id: i.id, contenedor: null, cant_estimada: null, cantidad: 0, um: i.um, corrientes: i.corrientes, contenedores: new Set<string>() }
+    g.cantidad += Number(i.cantidad); if (i.contenedor) g.contenedores.add(i.contenedor)
+    grupos.set(k, g)
+  }
+  const items = [...grupos.values()].map(({ contenedores, ...g }) => ({ ...g, contenedor: contenedores.size === 1 ? [...contenedores][0] : contenedores.size ? 'VARIOS' : null }))
+  const gp = v.generadores_principales, op = v.operadores
+  return {
+    id: v.id, numero: v.numero, fecha: v.fecha, tipo: 'azul', anulado: false, instrucciones: null,
+    direccion_retiro: gp?.direccion ?? null,
+    generadores: gp ? { nombre: gp.nombre, cuit: gp.cuit, ciudad: gp.ciudad, hab_mun_nro: gp.hab_mun_nro, hab_mun_vto: gp.hab_mun_vto } : null,
+    generadores_principales: op ? { nombre: op.nombre, cuit: op.cuit, hab_pro_nro: op.hab_pro_nro, hab_pro_vto: op.hab_pro_vto } : null,
+    transportistas: v.transportistas, camiones: v.camiones, choferes: v.choferes, manifiesto_items: items,
+  }
+}
 
 const RENGLONES = 7
 const cuitF = (c?: string | null) => (c && /^\d{11}$/.test(c) ? `${c.slice(0, 2)}-${c.slice(2, 10)}-${c.slice(10)}` : c ?? '')
@@ -54,7 +93,7 @@ const ajuste = (t: string | null | undefined, max: number) => (t && t.length > m
 interface Calib { x: number; y: number }
 const leerCalib = (): Calib => { try { return JSON.parse(localStorage.getItem('sgrp-calib-azul') ?? '') } catch { return { x: 0, y: 0 } } }
 
-export default function ImprimirManifiesto() {
+export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean }) {
   const { id } = useParams()
   const [m, setM] = useState<Datos | null>(null)
   const [p, setP] = useState<Record<string, string>>({})
@@ -68,11 +107,13 @@ export default function ImprimirManifiesto() {
   const [que, setQue] = useState<'sin3' | '3' | 'todo' | ''>(sp.get('que') === '3' ? '3' : '')
 
   useEffect(() => {
-    supabase.from('manifiestos').select(SELECT).eq('id', Number(id)).maybeSingle()
+    if (viaje) supabase.from('manifiestos_nacion').select(SELECT_VIAJE).eq('id', Number(id)).maybeSingle()
+      .then(({ data, error }) => { if (error || !data) setError(error ? mensajeError(error) : 'No existe este Manifiesto Nación.'); else setM(viajeComoManifiesto(data as unknown as Viaje)) })
+    else supabase.from('manifiestos').select(SELECT).eq('id', Number(id)).maybeSingle()
       .then(({ data, error }) => { if (error || !data) setError(error ? mensajeError(error) : 'No existe este manifiesto.'); else setM(data as unknown as Datos) })
     supabase.from('parametros').select('clave, valor').like('clave', 'form_%')
       .then(({ data }) => setP(Object.fromEntries((data ?? []).map((x) => [x.clave, x.valor]))))
-  }, [id])
+  }, [id, viaje])
 
   useEffect(() => { try { localStorage.setItem('sgrp-calib-azul', JSON.stringify(calib)) } catch { /* sin almacenamiento */ } }, [calib])
   useEffect(() => { document.body.classList.add('modo-formulario'); return () => document.body.classList.remove('modo-formulario') }, [])
@@ -85,7 +126,7 @@ export default function ImprimirManifiesto() {
 
   if (error) return <p className="aviso bad">{error}</p>
   if (!m) return <p className="cargando">Preparando la impresión…</p>
-  const volver = <p><Link to={`/manifiestos/${m.id}`}>Volver al manifiesto</Link></p>
+  const volver = <p><Link to={viaje ? `/nacion/${m.id}` : `/manifiestos/${m.id}`}>{viaje ? 'Volver al Manifiesto Nación' : 'Volver al manifiesto'}</Link></p>
   if (m.tipo !== 'azul') return <>{volver}<div className="aviso haz">Este manifiesto es de otro transportista (formulario rosa): lo completa el transportista y no se imprime desde el sistema.</div></>
   if (m.anulado) return <>{volver}<div className="aviso bad">El manifiesto está anulado.</div></>
 
@@ -167,8 +208,10 @@ export default function ImprimirManifiesto() {
   const hoja: CSSProperties = { transform: `scale(${escala})`, transformOrigin: 'top left' }
   const avisos = [
     con3 && !items.length && 'Todavía no se cargaron los residuos (sección 3): esa parte sale en blanco.',
-    con3 && items.length > RENGLONES && `El manifiesto tiene ${items.length} residuos y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
-    !g?.cuit && 'El generador no tiene CUIT cargado.',
+    con3 && items.length > RENGLONES && `El ${viaje ? 'viaje' : 'manifiesto'} tiene ${items.length} ${viaje ? 'corrientes' : 'residuos'} y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
+    !g && viaje && 'El viaje no tiene planta de salida cargada: el renglón del generador sale en blanco.',
+    !op && viaje && 'El viaje no tiene operador cargado.',
+    g && !g?.cuit && (viaje ? 'La planta de salida no tiene CUIT cargado.' : 'El generador no tiene CUIT cargado.'),
     !ca?.carga_pel_nro && 'El camión no tiene número de registro de carga peligrosa.',
     !ch?.carnet_nro && 'El chofer no tiene número de licencia cargado.',
   ].filter(Boolean) as string[]
@@ -177,8 +220,9 @@ export default function ImprimirManifiesto() {
     <>
       <div className="no-imprimir">
         {volver}
-        <h1>Imprimir manifiesto {fnum(m.numero)}</h1>
-        <p className="sub">Sobre el formulario azul preimpreso. A mano quedan solo las firmas.</p>
+        <h1>{viaje ? 'Imprimir viaje' : 'Imprimir manifiesto'} {fnum(m.numero)}</h1>
+        <p className="sub">{viaje ? 'Manifiesto Nación sobre el mismo formulario azul: generador es la planta de donde sale, destino el operador, y los residuos van sumados por corriente. A mano quedan solo las firmas.'
+          : 'Sobre el formulario azul preimpreso. A mano quedan solo las firmas.'}</p>
       </div>
       <div className="impresion">
         <div className="marco no-imprimir-fondo" ref={marco}>

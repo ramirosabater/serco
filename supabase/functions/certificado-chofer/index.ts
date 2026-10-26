@@ -6,22 +6,12 @@
 // porque el vencimiento lo lee el celular del chofer y se podría falsear.
 import { admin, cors, enviarMail, env, esc, fd, json, plantilla, quienLlama } from '../_compartido/comun.ts'
 import { DOCUMENTOS, pedirCertificados } from '../_compartido/pedidos.ts'
+import { guardarArchivo, tipoArchivo } from '../_compartido/archivos.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const MAX_INTENTOS = 6
 const ABIERTO = ['pendiente', 'enviado', 'sin_mail', 'subido']
-
-/** Qué es el archivo según sus primeros bytes (no se confía en el nombre ni en lo que diga el navegador) */
-function tipoArchivo(b: Uint8Array): { ext: string; mime: string } | null {
-  const ini = (s: string, o = 0) => [...s].every((c, i) => b[o + i] === c.charCodeAt(0))
-  if (ini('%PDF')) return { ext: 'pdf', mime: 'application/pdf' }
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { ext: 'jpg', mime: 'image/jpeg' }
-  if (b[0] === 0x89 && ini('PNG', 1)) return { ext: 'png', mime: 'image/png' }
-  if (ini('RIFF') && ini('WEBP', 8)) return { ext: 'webp', mime: 'image/webp' }
-  if (ini('ftyp', 4) && /hei|mif|avif/.test(String.fromCharCode(...b.slice(8, 12)))) return { ext: 'heic', mime: 'image/heic' }
-  return null
-}
 
 async function buscar(db: SupabaseClient, token: unknown) {
   if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) return null
@@ -76,9 +66,9 @@ async function subir(db: SupabaseClient, req: Request) {
   const dni = dniDe(p)
   if (dniLeido && dni && dniLeido !== dni) return json({ error: `El certificado es de otra persona (DNI terminado en ${dniLeido.slice(-3)}).` }, 422)
 
-  const ruta = `habilitaciones/choferes/${p.chofer_id}/${p.documento}_archivo-${venceLeido ?? 'sin-fecha'}-pedido${p.id}-${Date.now()}.${tipo.ext}`
-  const { error: e1 } = await db.storage.from('documentos').upload(ruta, bytes, { contentType: tipo.mime, upsert: false })
-  if (e1) return json({ error: 'No se pudo guardar el archivo. Probá de nuevo en un rato.' }, 500)
+  let ruta = `habilitaciones/choferes/${p.chofer_id}/${p.documento}_archivo-${venceLeido ?? 'sin-fecha'}-pedido${p.id}-${Date.now()}.${tipo.ext}`
+  try { ruta = await guardarArchivo(db, ruta, bytes, tipo.mime) }   // Drive de Serco (o el Storage si Drive no está configurado)
+  catch (e) { console.error(e); return json({ error: 'No se pudo guardar el archivo. Probá de nuevo en un rato.' }, 500) }
   const { error: e2 } = await db.from('pedidos_documento').update({
     estado: 'subido', archivo: ruta, subido: new Date().toISOString(), intentos: p.intentos + 1,
     vto_leido: venceLeido, dni_leido: dniLeido,

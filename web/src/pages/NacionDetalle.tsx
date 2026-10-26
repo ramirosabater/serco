@@ -123,7 +123,7 @@ export default function NacionDetalle() {
             </dl>
             <div className="bar mt" style={{ marginBottom: 0 }}>
               {n.escaneo && <button onClick={() => abrirArchivo(n.escaneo, setError)}>Ver formulario firmado</button>}
-              <button disabled title="Falta el formulario verde en blanco para medir dónde va cada dato">Imprimir en el formulario verde</button>
+              <Link to={`/nacion/${n.id}/imprimir`} data-ayuda="nac-imprimir"><button>Imprimir en el formulario azul</button></Link>
             </div>
           </div>
 

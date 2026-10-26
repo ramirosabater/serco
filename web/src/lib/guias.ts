@@ -137,7 +137,7 @@ export const CIRCUITOS: Circuito[] = [
     pasos: [
       { ir: '/planta', foco: 'pl-plan', titulo: 'Viajes sugeridos', texto: 'El sistema reparte lo almacenado en viajes según el plazo en planta, la capacidad de la batea o la cisterna, qué se puede mezclar y qué acepta cada operador.' },
       { foco: 'pl-usar', titulo: 'Elegir un viaje', texto: 'Revisás el destino y tocás "Armar este viaje". Con "Mover" pasás un residuo a otro viaje o lo dejás en planta.', falta: 'Ahora no hay nada almacenado para armar viajes.' },
-      { titulo: 'Datos del viaje', texto: 'Después cargás el número del formulario verde, el camión y el chofer. Los residuos pasan a en tránsito hasta que llegue el certificado.' },
+      { titulo: 'Datos del viaje', texto: 'Después cargás el número del formulario (el mismo azul de los retiros: el sistema propone el que sigue), el camión y el chofer. Al armarlo lo podés imprimir en el formulario azul. Los residuos pasan a en tránsito hasta que llegue el certificado.' },
       { foco: 'texto:Selección manual', titulo: 'A mano', texto: 'Si preferís elegir vos qué va en el viaje, está la selección manual.' },
     ],
   },

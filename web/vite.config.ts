@@ -9,6 +9,7 @@ export default defineConfig({
       ? {
           '/rest/v1': { target: process.env.POSTGREST_URL, rewrite: (p) => p.replace(/^\/rest\/v1/, '') },
           // Funciones corriendo con Deno en la PC (opcional)
+          ...(process.env.FUNCIONES_ARCHIVOS_URL ? { '/functions/v1/archivos': { target: process.env.FUNCIONES_ARCHIVOS_URL, rewrite: (p: string) => p.replace(/^\/functions\/v1\/archivos/, '') } } : {}),
           ...(process.env.FUNCIONES_URL ? { '/functions/v1': { target: process.env.FUNCIONES_URL, rewrite: (p: string) => p.replace(/^\/functions\/v1\/[^/?]+/, '') } } : {}),
         }
       : undefined,
