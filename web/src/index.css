@@ -549,3 +549,10 @@ button.grande { padding: 14px 18px; font-size: 17px; width: 100%; }
 h2 .explica, .titulo-explica .explica { margin-left: 8px; vertical-align: middle; }
 .explica-todo { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 14px; }
 .explica-todo .explica { border-color: var(--acc); color: var(--acc); }
+
+/* Filtros del tablero */
+.filtros { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; align-items: end; padding: 14px 16px; }
+.filtros .campo { min-width: 0; font-size: 13px; }
+.filtros .campo.ancho { grid-column: span 2; }
+.filtros .limpiar { justify-self: start; padding-bottom: 12px; white-space: nowrap; }
+@media (max-width: 520px) { .filtros { grid-template-columns: 1fr 1fr; } }

@@ -4,7 +4,7 @@ Abren el sistema en un navegador y recorren lo importante solas. En un par de mi
 
 | Prueba | Qué revisa |
 | --- | --- |
-| 01 Tablero | Que el tablero cargue los números y las etapas; que abran la agenda y los vencimientos |
+| 01 Tablero | Que el tablero cargue los números y las etapas, que los filtros cambien los números y queden al recargar, y que abran la agenda y los vencimientos |
 | 02 Manifiesto | Emite un manifiesto de prueba, carga la sección 3, la corrige y lo anula |
 | 03 Búsqueda | El filtro por etapa (el que llegó a cortar por tiempo) y abrir un manifiesto |
 | 04 Planta | Por ingresar, armar carga, esperando certificado y Manifiestos Nación (solo mira: no arma viajes) |
@@ -35,7 +35,7 @@ En `C:\Apps\sgrp2\pruebas`:
 npm.cmd run probar
 ```
 
-- Todo bien: termina con `29 passed`.
+- Todo bien: termina con `30 passed`.
 - Si algo falla, dice cuál prueba y por qué. Para ver la captura y el paso a paso: `npm.cmd run informe`.
 - Para mirar cómo trabaja el navegador: `npm.cmd run ver`.
 

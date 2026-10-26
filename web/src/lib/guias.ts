@@ -70,7 +70,8 @@ export const CIRCUITOS: Circuito[] = [
   {
     id: 'tablero', titulo: 'Leer el tablero', area: 'tablero', roles: INTERNOS,
     pasos: [
-      { ir: '/', foco: '.grid.k4', titulo: 'Los números del año', texto: 'Arriba tenés los manifiestos del año, las toneladas, los generadores atendidos y lo que todavía no tiene disposición final.' },
+      { ir: '/', foco: 'tab-filtros', titulo: 'Los filtros', texto: 'Arriba de todo elegís el período (este año, el mes pasado, fechas a elección) y, si querés, una planta, un transportista, un generador, el formulario o la etapa. Todo el tablero se acomoda a eso.' },
+      { foco: '.grid.k4', titulo: 'Los números', texto: 'Los manifiestos del período, las toneladas, los generadores atendidos y lo que todavía no tiene disposición final. El signo de pregunta de cada uno te explica de dónde sale.' },
       { foco: 'tab-etapas', titulo: 'Por etapa', texto: 'Las barras muestran cuántos manifiestos hay en cada etapa. Tocá una barra y te lleva a esa lista.' },
     ],
   },
