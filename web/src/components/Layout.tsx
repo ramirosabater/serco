@@ -47,7 +47,7 @@ export default function Layout() {
       .then(({ count }) => setEsperando(count ?? 0))
     const d = new Date(); d.setDate(d.getDate() - 60)
     supabase.from('manifiestos').select('id, et:manifiesto_etapas!inner(etapa)', { count: 'exact', head: true })
-      .eq('et.etapa', 0).eq('anulado', false).gte('fecha', d.toISOString().slice(0, 10))
+      .eq('et.etapa', 0).eq('anulado', false).is('viaje_id', null).gte('fecha', d.toISOString().slice(0, 10))
       .then(({ count }) => setPorIngresar(count ?? 0))
   }, [pathname, search, perfil?.rol])
 

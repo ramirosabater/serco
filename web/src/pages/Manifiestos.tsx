@@ -27,7 +27,7 @@ export default function Manifiestos() {
     // Número, código de corriente (Y48, Y9…) o nombre del generador
     const soloNumero = /^[\d\s-]+$/.test(q)
     const corriente = /^y\d/i.test(q)
-    const sel = `id, numero, fecha, tipo, anulado, etapa, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
+    const sel = `id, numero, fecha, tipo, anulado, viaje_id, etapa, generadores${q && !soloNumero && !corriente ? '!inner' : ''}(nombre),
       manifiesto_items(estado, cantidad, um, corrientes(codigo))${corriente ? ', filtro:manifiesto_items!inner(corrientes!inner(codigo))' : ''}${etapa ? ', et:manifiesto_etapas!inner(etapa)' : ''}`
     let c = supabase.from('manifiestos').select(sel, { count: 'exact' })
     if (q) c = soloNumero ? c.ilike('numero', `%${q.replace(/\D/g, '')}%`)
@@ -82,7 +82,7 @@ export default function Manifiestos() {
                   <td>{m.generadores?.nombre}</td>
                   <td>{it.map((i, n) => <span key={n} className="pill" style={{ margin: '2px 4px 2px 0' }}>{i.corrientes?.codigo}</span>)}</td>
                   <td className="nw">{it.map((i) => `${num(i.cantidad)} ${umL(i.um)}`).join(' + ')}</td>
-                  <td>{m.anulado ? <span className="pill bad">Anulado</span> : <span className="etapa-celda"><MiniEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /><PillEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /></span>}</td>
+                  <td>{m.anulado ? <span className="pill bad">Anulado</span> : m.viaje_id ? <span className="pill" title="El Access cargaba el viaje también como manifiesto: no cuenta como retiro">Formulario del viaje</span> : <span className="etapa-celda"><MiniEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /><PillEtapa etapa={m.etapa ?? etapaManifiesto(it.map((i) => i.estado))} /></span>}</td>
                 </tr>)
             })}</tbody>
           </table></div>)}

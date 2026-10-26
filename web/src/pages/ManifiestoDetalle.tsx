@@ -66,6 +66,7 @@ export default function ManifiestoDetalle() {
       <p className="sub">{m.generadores?.nombre} · transporta {m.transportistas?.nombre} · formulario {m.tipo}</p>
       {error && <div className="aviso bad" style={{ marginBottom: 12 }}>{error}</div>}
       {m.anulado && <div className="aviso bad" style={{ marginBottom: 12 }}>Anulado. Motivo: {m.anulado_motivo}</div>}
+      {m.viaje_id && <div className="aviso" style={{ marginBottom: 12 }}>Es el formulario del viaje <Link to={`/nacion/${m.viaje_id}`}>Manifiesto Nación {fnum(m.numero)}</Link>, que en el Access se cargaba también como manifiesto, con el total en un renglón. No cuenta como retiro: esos residuos ya están en los manifiestos de los clientes que van en el viaje.</div>}
       {m.validacion_omitida && <div className="aviso haz" style={{ marginBottom: 12 }}>Emitido con vencimientos sin regularizar. Motivo: {m.validacion_omitida}</div>}
 
       {!m.anulado && <div className="card" data-ayuda="det-recorrido"><h2>Recorrido del residuo</h2>

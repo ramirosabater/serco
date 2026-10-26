@@ -29,6 +29,8 @@ export interface Manifiesto {
   tipo: 'azul' | 'rosa'
   anulado: boolean
   anulado_motivo: string | null
+  /** Si está cargado, es el formulario del viaje (Manifiesto Nación) que el Access cargaba como retiro: no cuenta en estadísticas */
+  viaje_id?: number | null
   direccion_retiro: string | null
   nota: string | null
   escaneo: string | null

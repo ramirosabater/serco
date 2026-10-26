@@ -15,7 +15,7 @@ interface Datos {
   camiones: { patente: string } | null; choferes: { nombre: string } | null; generadores_principales: { nombre: string } | null
   manifiesto_items: {
     id: number; cantidad: number; um: UM; estado: string; corrientes: { codigo: string; descripcion: string | null } | null
-    manifiestos: { id: number; numero: string; fecha: string; generadores: { id: number; nombre: string } | null } | null
+    manifiestos: { id: number; numero: string; fecha: string; viaje_id: number | null; generadores: { id: number; nombre: string } | null } | null
     certificados: { id: number; numero: string; fecha: string; archivo: string | null; tipo_tratamiento: string | null; enviado_cliente: string | null } | null
   }[]
 }
@@ -23,10 +23,11 @@ interface Aviso { certificado_id: number; generador_id: number; email: string | 
 
 const SELECT = `id, numero, fecha, escaneo, validacion_omitida, operadores(nombre), transportistas(nombre), camiones(patente), choferes(nombre),
   generadores_principales(nombre),
-  manifiesto_items(id, cantidad, um, estado, corrientes(codigo, descripcion), manifiestos(id, numero, fecha, generadores(id, nombre)),
+  manifiesto_items(id, cantidad, um, estado, corrientes(codigo, descripcion), manifiestos(id, numero, fecha, viaje_id, generadores(id, nombre)),
     certificados(id, numero, fecha, archivo, tipo_tratamiento, enviado_cliente))`
 
 export default function NacionDetalle() {
+  const [formulario, setFormulario] = useState<{ id: number; numero: string } | null>(null)
   const { id } = useParams()
   const nav = useNavigate()
   const { perfil } = useAuth()
@@ -39,7 +40,13 @@ export default function NacionDetalle() {
   const cargar = () => {
     supabase.from('manifiestos_nacion').select(SELECT).eq('id', Number(id)).maybeSingle().then(({ data, error }) => {
       if (error || !data) { setError(error ? mensajeError(error) : 'No existe este Manifiesto Nación.'); return }
-      const d = data as unknown as Datos
+      const todo = data as unknown as Datos
+      // En el Access el viaje también se cargaba como un manifiesto azul a nombre de Serco, con el resumen en un renglón:
+      // ese renglón ya está en los manifiestos de los clientes, así que no se lista ni se suma.
+      const esForm = (i: Datos['manifiesto_items'][number]) => i.manifiestos?.viaje_id === todo.id
+      const f = todo.manifiesto_items.find(esForm)?.manifiestos
+      setFormulario(f ? { id: f.id, numero: f.numero } : null)
+      const d = { ...todo, manifiesto_items: todo.manifiesto_items.filter((i) => !esForm(i)) }
       setN(d)
       const certs = [...new Set(d.manifiesto_items.map((i) => i.certificados?.id).filter(Boolean))] as number[]
       if (certs.length) supabase.from('avisos_certificados').select('*').in('certificado_id', certs).then(({ data }) => setAvisos((data ?? []) as Aviso[]))
@@ -92,6 +99,7 @@ export default function NacionDetalle() {
       <p className="sub">{fd(n.fecha)} · destino {n.operadores?.nombre ?? '—'} · {tot.map(([u, v]) => `${num(v)} ${umL(u)}`).join(' + ')}</p>
       {error && <div className="aviso bad" style={{ marginBottom: 12 }}>{error}</div>}
       {ok && <div className="aviso ok" style={{ marginBottom: 12 }}>{ok}</div>}
+      {formulario && <div className="aviso" style={{ marginBottom: 12 }}>En el Access este viaje también se cargó como el manifiesto <Link to={`/manifiestos/${formulario.id}`}>{fnum(formulario.numero)}</Link> a nombre de Serco, con el total en un renglón. Ese renglón no se suma acá ni en los reportes: los residuos son los de los manifiestos de los clientes.</div>}
       {n.validacion_omitida && <div className="aviso haz" style={{ marginBottom: 12 }}>Se armó con vencimientos sin regularizar. Motivo: {n.validacion_omitida}</div>}
 
       <div className="grid c21">

@@ -38,20 +38,21 @@ const SELECT_VIAJE = `id, numero, fecha,
   transportistas(nombre, hab_pro_vto),
   camiones(patente, tipo, carga_pel_nro, carga_pel_vto),
   choferes(nombre, carnet_nro, carga_pel_vto),
-  manifiesto_items(id, contenedor, cantidad, um, corrientes(codigo, descripcion, estado_fisico))`
+  manifiesto_items(id, contenedor, cantidad, um, corrientes(codigo, descripcion, estado_fisico), manifiestos(viaje_id))`
 
 interface Viaje {
   id: number; numero: string; fecha: string
   generadores_principales: { nombre: string; cuit: string | null; direccion: string | null; ciudad: string | null; hab_mun_nro: string | null; hab_mun_vto: string | null } | null
   operadores: { nombre: string; cuit: string | null; hab_pro_nro: string | null; hab_pro_vto: string | null } | null
   transportistas: Datos['transportistas']; camiones: Datos['camiones']; choferes: Datos['choferes']
-  manifiesto_items: { id: number; contenedor: string | null; cantidad: number; um: UM; corrientes: { codigo: string; descripcion: string | null; estado_fisico: string | null } | null }[]
+  manifiesto_items: { id: number; contenedor: string | null; cantidad: number; um: UM; corrientes: { codigo: string; descripcion: string | null; estado_fisico: string | null } | null; manifiestos: { viaje_id: number | null } | null }[]
 }
 
 /** El viaje, puesto en la forma de un manifiesto para el mismo formulario: residuos sumados por corriente y unidad */
 function viajeComoManifiesto(v: Viaje): Datos {
   const grupos = new Map<string, Datos['manifiesto_items'][number] & { contenedores: Set<string> }>()
   for (const i of v.manifiesto_items) {
+    if (i.manifiestos?.viaje_id === v.id) continue   // el renglón del formulario del viaje del Access: ya está sumado
     const k = `${i.corrientes?.codigo}|${i.um}`
     const g = grupos.get(k) ?? { id: i.id, contenedor: null, cant_estimada: null, cantidad: 0, um: i.um, corrientes: i.corrientes, contenedores: new Set<string>() }
     g.cantidad += Number(i.cantidad); if (i.contenedor) g.contenedores.add(i.contenedor)

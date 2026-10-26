@@ -131,6 +131,9 @@ def main():
         cur.execute("select to_regproc('public.recalcular_etapas')")
         if cur.fetchone()[0]:
             cur.execute('select recalcular_etapas()')
+        cur.execute("select to_regproc('public.marcar_formularios_viaje')")
+        if cur.fetchone()[0]:   # formularios de viaje del Access: no cuentan como retiros
+            cur.execute('select marcar_formularios_viaje()')
         db.commit()
     except Exception as e:
         db.rollback()

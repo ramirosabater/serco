@@ -2,8 +2,9 @@
 -- Gestión Serco · El viaje a disposición final (Manifiesto Nación) va en el MISMO formulario azul
 -- que los retiros, con el número siguiente del talonario.
 --   - El número sugerido mira los retiros y los viajes del mismo transportista.
---   - Un número del talonario no se puede usar dos veces (en un retiro y en un viaje).
---     Las migraciones del Access no pasan por este control (ahí el viaje también figura como retiro).
+--   - Al emitir un retiro, el número no puede ser el de un viaje. Al armar un viaje no se bloquea
+--     (un viaje directo lleva el número del retiro): la pantalla avisa si el número ya es de un retiro.
+--     Lo que viene del Access no pasa por este control (ahí el viaje también figura como retiro).
 -- Se puede correr más de una vez.
 -- =====================================================================
 create or replace function sugerir_numero(p_transportista bigint) returns text
@@ -21,14 +22,10 @@ create or replace function numero_formulario_libre() returns trigger
 language plpgsql set search_path = public as $$
 declare otro record;
 begin
-  if new.numero is null or new.transportista_id is null then return new; end if;
-  if tg_table_name = 'manifiestos' then
-    select 'el Manifiesto Nación (viaje) del ' || to_char(fecha, 'DD/MM/YYYY') as que into otro
-    from manifiestos_nacion where numero = new.numero and transportista_id = new.transportista_id limit 1;
-  else
-    select 'el manifiesto de retiro del ' || to_char(fecha, 'DD/MM/YYYY') as que into otro
-    from manifiestos where numero = new.numero and transportista_id = new.transportista_id limit 1;
-  end if;
+  -- Lo que viene del Access no se controla (ahí el viaje y su formulario azul comparten número).
+  if new.numero is null or new.transportista_id is null or new.usuario_access is not null or new.creado_por is null then return new; end if;
+  select 'el Manifiesto Nación (viaje) del ' || to_char(fecha, 'DD/MM/YYYY') as que into otro
+  from manifiestos_nacion where numero = new.numero and transportista_id = new.transportista_id limit 1;
   if otro.que is not null then
     raise exception 'El formulario % ya se usó en %. Revisá el número del talonario.', fmt_numero(new.numero), otro.que;
   end if;
@@ -36,9 +33,11 @@ begin
 end $$;
 revoke execute on function numero_formulario_libre() from public, anon, authenticated;
 
+-- Al emitir un retiro se controla que el número no sea el de un viaje. Al armar un viaje no se bloquea:
+-- un viaje directo (del generador al operador, sin pasar por planta) lleva el número del manifiesto del retiro.
+-- En ese caso la pantalla avisa para que se revise.
 drop trigger if exists numero_libre on manifiestos;
 create trigger numero_libre before insert on manifiestos for each row execute function numero_formulario_libre();
 drop trigger if exists numero_libre on manifiestos_nacion;
-create trigger numero_libre before insert on manifiestos_nacion for each row execute function numero_formulario_libre();
 
 grant execute on function sugerir_numero(bigint) to authenticated;

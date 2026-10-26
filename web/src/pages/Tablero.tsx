@@ -136,7 +136,7 @@ export default function Tablero() {
   useEffect(() => {
     let q = supabase.from('manifiestos')
       .select(`id, numero, fecha, tipo, anulado, etapa, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))${etapa ? ', et:manifiesto_etapas!inner(etapa)' : ''}`)
-      .eq('anulado', false)
+      .eq('anulado', false).is('viaje_id', null)
     if (planta) q = q.eq('generador_principal_id', Number(planta))
     if (transp) q = q.eq('transportista_id', Number(transp))
     if (gen) q = q.eq('generador_id', Number(gen))

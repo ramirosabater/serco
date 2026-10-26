@@ -142,6 +142,11 @@ def main():
                 end loop; end $$""")
         cur.execute('select recalcular_etapas()')
         etapas = cur.fetchone()[0]
+        viajes = 0
+        cur.execute("select to_regproc('public.marcar_formularios_viaje')")
+        if cur.fetchone()[0]:   # formularios de viaje nuevos del Access: no cuentan como retiros
+            cur.execute('select marcar_formularios_viaje()')
+            viajes = cur.fetchone()[0]
     except Exception as e:
         db.rollback()
         sys.exit(f'\nSe canceló y la base quedó como estaba. Error: {e}')
@@ -150,6 +155,7 @@ def main():
     print(f'  filas nuevas:       {cambiadas["insert"]:,}'.replace(',', '.'))
     print(f'  filas actualizadas: {cambiadas["update"]:,}'.replace(',', '.'))
     print(f'  etapas recalculadas: {etapas:,}'.replace(',', '.'))
+    if viajes: print(f'  formularios de viaje marcados: {viajes:,}'.replace(',', '.'))
     if resumen: print(f'  detalle: {resumen}')
     if '--si' not in sys.argv and input('\nEscribí APLICAR para guardar los cambios, o Enter para cancelar: ').strip() != 'APLICAR':
         db.rollback()

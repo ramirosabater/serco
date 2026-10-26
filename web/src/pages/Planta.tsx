@@ -65,6 +65,7 @@ function ArmarCarga() {
   const [omitir, setOmitir] = useState('')
   const [modal, setModal] = useState(false)
   const [sugerido, setSugerido] = useState('')
+  const [usado, setUsado] = useState('')
   const [armado, setArmado] = useState<number | null>(null)
 
   useEffect(() => {
@@ -107,6 +108,21 @@ function ArmarCarga() {
       setSugerido(n); setForm((f) => (f.numero ? f : { ...f, numero: n }))
     })
   }, [form.transportista, armado])
+
+  // Si el número ya es de un retiro: solo está bien en un viaje directo (del generador al operador)
+  useEffect(() => {
+    setUsado('')
+    const num9 = form.numero.replace(/\D/g, '')
+    if (!form.transportista || num9.length !== 9) return
+    const t = setTimeout(() => {
+      supabase.from('manifiestos').select('fecha, generadores(nombre)').eq('numero', num9).eq('transportista_id', Number(form.transportista)).limit(1)
+        .then(({ data }) => {
+          const m = data?.[0] as unknown as { fecha: string; generadores: { nombre: string } | null } | undefined
+          if (m) setUsado(`Ese número ya es el manifiesto de retiro de ${m.generadores?.nombre ?? '—'} del ${fd(m.fecha)}. Solo está bien si es un viaje directo desde ese generador; si no, revisá el talonario.`)
+        })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [form.numero, form.transportista])
 
   const elegidos = filas.filter((f) => sel.has(f.id))
   const corrientesSel = useMemo(() => [...new Set(elegidos.map((f) => f.corriente_id))], [elegidos])
@@ -174,6 +190,7 @@ function ArmarCarga() {
         <input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} required inputMode="numeric" placeholder="837007470" />
         <span className="ayuda">{sugerido ? `Es el mismo formulario azul de los retiros: el siguiente es ${fnum(sugerido)}. Revisá que coincida con el papel.` : 'El mismo formulario azul de los retiros, con el número que sigue.'}</span>
       </label>
+      {usado && <div className="aviso haz">{usado}</div>}
       <label className="campo">Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} required /></label>
       <label className="campo">Operador de disposición final
         <select value={form.operador} onChange={(e) => setForm({ ...form, operador: e.target.value })} required>
@@ -364,7 +381,7 @@ function EnTransitoLista() {
 
 interface NacionFila {
   id: number; numero: string; fecha: string; operadores: { nombre: string } | null
-  manifiesto_items: { estado: string; cantidad: number; um: UM; manifiesto_id: number; certificados: { numero: string } | null }[]
+  manifiesto_items: { estado: string; cantidad: number; um: UM; manifiesto_id: number; certificados: { numero: string } | null; manifiestos: { viaje_id: number | null } | null }[]
 }
 const POR_PAGINA = 50
 
@@ -383,7 +400,7 @@ function PorIngresar() {
   useEffect(() => {
     setLista(null)
     let c = supabase.from('manifiestos').select('id, numero, fecha, tipo, generadores(nombre), generadores_principales(nombre), choferes(nombre), camiones(patente), et:manifiesto_etapas!inner(etapa)', { count: 'exact' })
-      .eq('et.etapa', 0).eq('anulado', false)
+      .eq('et.etapa', 0).eq('anulado', false).is('viaje_id', null)
     if (!todos) c = c.gte('fecha', haceDias(60))
     c.order('fecha', { ascending: false }).order('numero', { ascending: false }).limit(200)
       .then(({ data, count, error }) => { setError(mensajeError(error)); setLista((data ?? []) as unknown as Iniciado[]); setTotal(count ?? 0) })
@@ -427,10 +444,14 @@ function NacionLista() {
   useEffect(() => {
     setCargando(true)
     const t = setTimeout(() => {
-      let c = supabase.from('manifiestos_nacion').select('id, numero, fecha, operadores(nombre), manifiesto_items(estado, cantidad, um, manifiesto_id, certificados(numero))', { count: 'exact' })
+      let c = supabase.from('manifiestos_nacion').select('id, numero, fecha, operadores(nombre), manifiesto_items(estado, cantidad, um, manifiesto_id, certificados(numero), manifiestos(viaje_id))', { count: 'exact' })
       if (q.trim()) c = c.ilike('numero', `%${q.replace(/\D/g, '')}%`)
       c.order('fecha', { ascending: false }).order('numero', { ascending: false }).range(pagina * POR_PAGINA, pagina * POR_PAGINA + POR_PAGINA - 1)
-        .then(({ data, count, error }) => { setError(mensajeError(error)); setLista((data ?? []) as unknown as NacionFila[]); setTotal(count ?? 0); setCargando(false) })
+        .then(({ data, count, error }) => {
+          setError(mensajeError(error)); setTotal(count ?? 0); setCargando(false)
+          // sin el renglón del formulario del viaje que cargaba el Access (ya está en los manifiestos de los clientes)
+          setLista(((data ?? []) as unknown as NacionFila[]).map((n) => ({ ...n, manifiesto_items: n.manifiesto_items.filter((i) => i.manifiestos?.viaje_id !== n.id) })))
+        })
     }, 250)
     return () => clearTimeout(t)
   }, [q, pagina])

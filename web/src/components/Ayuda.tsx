@@ -93,7 +93,7 @@ async function resolverIr(ir: string): Promise<string | null> {
   if (!ir.startsWith(':')) return ir
   const [atajo, resto] = ir.slice(1).split('/')
   if (atajo === 'manifiesto' || atajo === 'iniciado') {
-    let q = supabase.from('manifiestos').select('id, et:manifiesto_etapas!inner(etapa)').eq('anulado', false)
+    let q = supabase.from('manifiestos').select('id, et:manifiesto_etapas!inner(etapa)').eq('anulado', false).is('viaje_id', null)
     q = atajo === 'iniciado' ? q.eq('et.etapa', 0) : q.gte('et.etapa', 1)
     if (resto === 'imprimir') q = q.eq('tipo', 'azul')
     const { data } = await q.order('fecha', { ascending: false }).limit(1)

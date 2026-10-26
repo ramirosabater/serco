@@ -18,7 +18,7 @@ const REPORTES: Record<string, [string, string]> = {
 
 /** Qué explica Serquito de cada reporte (el "?" junto al título) */
 const QUE_ES: Record<string, string> = {
-  producto: 'Suma lo retirado de cada corriente, por semana, quincena o mes, según la fecha del retiro. Se elige la unidad (kilos, litros o metros cúbicos) y se puede filtrar por planta o transportista. Los manifiestos anulados no cuentan. Se exporta a Excel y, si está configurado, llega por mail cada lunes.',
+  producto: 'Suma lo retirado de cada corriente, por semana, quincena o mes, según la fecha del retiro. Se elige la unidad (kilos, litros o metros cúbicos) y se puede filtrar por planta o transportista. No cuentan los manifiestos anulados ni los formularios de viaje que el Access cargaba como retiro. Se exporta a Excel y, si está configurado, llega por mail cada lunes.',
   provincial: 'Es el libro de movimientos de cada planta: un renglón por residuo, con generador, corriente, cantidad y en qué quedó. Se elige la planta y el período, y se imprime para rubricar o se exporta a Excel.',
   nacional: 'Lista los Manifiestos Nación del período, es decir, los viajes al operador de disposición final, con los residuos que llevó cada uno y su certificado cuando ya volvió.',
   transporte: 'Es el libro de cada transportista: todos los retiros que hizo en el período, con el camión, el chofer y lo que llevó.',
@@ -134,6 +134,8 @@ interface Mov {
   id: number; numero: string; fecha: string; transportista: string; planta: string | null; generador: string; generador_cuit: string | null
   direccion_retiro: string | null; patente: string | null; chofer: string | null; corriente: string; contenedor: string | null
   cantidad: number; um: UM; estado: string; nacion: string | null; certificado: string | null; certificado_fecha: string | null; operador: string | null
+  /** El formulario del viaje que el Access cargaba como retiro: va en el libro (es un formulario usado) pero no suma */
+  formulario_viaje?: boolean
 }
 const SIN_CORTE = new Set(['Fecha', 'Manifiesto', 'CUIT', 'Manif. Nación', 'Certificado', 'Dominio', 'UM', 'Corriente', 'Estado'])
 const ESTADO: Record<string, string> = { almacenado: 'Almacenado', en_transito: 'En tránsito', disposicion_final: 'Dispuesto' }
@@ -168,17 +170,18 @@ function LibroMovimientos({ tipo }: { tipo: 'provincial' | 'transporte' }) {
 
   const nombre = opciones.find((o) => String(o.id) === filtro)?.nombre ?? ''
   const cols: Columna<Mov>[] = tipo === 'provincial' ? [
-    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.generador },
+    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.formulario_viaje ? `${f.generador} (formulario del viaje)` : f.generador },
     { t: 'CUIT', v: (f) => cuitF(f.generador_cuit) }, { t: 'Transportista', v: (f) => f.transportista }, { t: 'Corriente', v: (f) => f.corriente },
     { t: 'Cantidad', v: (f) => f.cantidad }, { t: 'UM', v: (f) => umL(f.um) }, { t: 'Estado', v: (f) => ESTADO[f.estado] },
     { t: 'Manif. Nación', v: (f) => (f.nacion ? fnum(f.nacion) : '') }, { t: 'Operador', v: (f) => f.operador }, { t: 'Certificado', v: (f) => f.certificado },
   ] : [
-    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.generador },
+    { t: 'Fecha', v: (f) => f.fecha }, { t: 'Manifiesto', v: (f) => fnum(f.numero) }, { t: 'Generador', v: (f) => f.formulario_viaje ? `${f.generador} (formulario del viaje)` : f.generador },
     { t: 'Dirección de retiro', v: (f) => f.direccion_retiro }, { t: 'Dominio', v: (f) => f.patente }, { t: 'Chofer', v: (f) => f.chofer },
     { t: 'Corriente', v: (f) => f.corriente }, { t: 'Contenedor', v: (f) => f.contenedor }, { t: 'Cantidad', v: (f) => f.cantidad },
     { t: 'UM', v: (f) => umL(f.um) }, { t: 'Planta', v: (f) => f.planta },
   ]
-  const totales = (['KGS', 'LTS', 'MS3'] as UM[]).map((u) => [u, filas.filter((f) => f.um === u).reduce((a, f) => a + f.cantidad, 0)] as const).filter(([, v]) => v)
+  const suman = filas.filter((f) => !f.formulario_viaje), formularios = filas.length - suman.length
+  const totales = (['KGS', 'LTS', 'MS3'] as UM[]).map((u) => [u, suman.filter((f) => f.um === u).reduce((a, f) => a + f.cantidad, 0)] as const).filter(([, v]) => v)
 
   return (
     <>
@@ -192,12 +195,12 @@ function LibroMovimientos({ tipo }: { tipo: 'provincial' | 'transporte' }) {
         {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin movimientos en el período.</p> : (
           <div className="tw"><table className="compacta">
             <thead><tr>{cols.map((c) => <th key={c.t} style={c.t === 'Cantidad' ? { textAlign: 'right' } : undefined}>{c.t}</th>)}</tr></thead>
-            <tbody>{filas.map((f) => <tr key={f.id}>{cols.map((c) => {
+            <tbody>{filas.map((f) => <tr key={f.id} className={f.formulario_viaje ? 'muted' : undefined}>{cols.map((c) => {
               const v = c.v(f)
               return <td key={c.t} className={c.t === 'Cantidad' ? 'n' : SIN_CORTE.has(c.t) ? 'nw' : undefined}>{c.t === 'Fecha' ? fd(String(v)) : typeof v === 'number' ? num(v) : v}</td>
             })}</tr>)}</tbody>
           </table></div>)}
-        {totales.length > 0 && <p style={{ marginBottom: 0 }}><b>Total:</b> {totales.map(([u, v]) => `${num(Math.round(v))} ${umL(u)}`).join(' · ')}</p>}
+        {totales.length > 0 && <p style={{ marginBottom: 0 }}><b>Total:</b> {totales.map(([u, v]) => `${num(Math.round(v))} ${umL(u)}`).join(' · ')}{formularios > 0 && <span className="muted small"> · sin los {num(formularios)} renglones de formularios de viaje, que ya están en los manifiestos de los clientes</span>}</p>}
       </div>
     </>
   )
@@ -314,7 +317,7 @@ function pasosEstadisticas(e: Est): Paso[] {
   const mejor = meses.reduce<Est['por_mes'][number] | null>((a, x) => (!a || (x.kgs ?? 0) > (a.kgs ?? 0) ? x : a), null)
   const l = [
     { titulo: 'Los números del período', foco: 'est-kpis',
-      texto: `${num(e.manifiestos)} manifiestos de ${num(e.generadores)} generadores. Se retiraron ${num(Math.round((e.totales.KGS ?? 0) / 1000))} toneladas de sólidos y barros y ${num(Math.round(e.totales.LTS ?? 0))} litros de líquidos. No cuentan los anulados.` },
+      texto: `${num(e.manifiestos)} manifiestos de ${num(e.generadores)} generadores. Se retiraron ${num(Math.round((e.totales.KGS ?? 0) / 1000))} toneladas de sólidos y barros y ${num(Math.round(e.totales.LTS ?? 0))} litros de líquidos. No cuentan los anulados ni los formularios de viaje del Access.` },
     meses.length > 1 && mejor ? { titulo: 'Kilos por mes', foco: 'est-meses',
       texto: `Cada barra es un mes. El de más kilos fue ${['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][+mejor.mes.slice(5, 7) - 1]} de ${mejor.mes.slice(0, 4)}, con ${num(Math.round((mejor.kgs ?? 0) / 1000))} toneladas.` } : null,
     e.estado_fisico ? explicaEstado(e.estado_fisico) : null,

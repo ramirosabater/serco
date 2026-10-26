@@ -36,7 +36,7 @@ function VerComo() {
     if (!interno) return
     const desde = new Date(); desde.setFullYear(desde.getFullYear() - 1)
     traerTodo<{ generador_id: number; generadores: { nombre: string } | null }>(() => supabase.from('manifiestos')
-      .select('generador_id, generadores(nombre)').eq('anulado', false).gte('fecha', desde.toISOString().slice(0, 10)).order('id'))
+      .select('generador_id, generadores(nombre)').eq('anulado', false).is('viaje_id', null).gte('fecha', desde.toISOString().slice(0, 10)).order('id'))
       .then(({ data }) => {
         const m = new Map<number, { id: number; nombre: string; n: number }>()
         for (const x of data) { const e = m.get(x.generador_id) ?? { id: x.generador_id, nombre: x.generadores?.nombre ?? '?', n: 0 }; e.n++; m.set(x.generador_id, e) }
@@ -71,7 +71,7 @@ export function PortalRetiros() {
     setCargando(true); setEtapa(null)
     let c = supabase.from('manifiestos')
       .select('id, numero, fecha, tipo, anulado, etapa, generadores(nombre), manifiesto_items(estado, cantidad, um, corrientes(codigo))')
-      .eq('anulado', false).gte('fecha', `${anio}-01-01`).lte('fecha', `${anio}-12-31`)
+      .eq('anulado', false).is('viaje_id', null).gte('fecha', `${anio}-01-01`).lte('fecha', `${anio}-12-31`)
     if (g) c = c.eq('generador_id', g)
     c.order('fecha', { ascending: false }).limit(1000)
       .then(({ data, error }) => { setError(mensajeError(error)); setLista((data ?? []) as unknown as Manifiesto[]); setCargando(false) })

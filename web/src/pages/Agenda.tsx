@@ -41,7 +41,7 @@ export default function Agenda() {
     setEventos(null); setError('')
     Promise.all([
       traerTodo<{ id: number; numero: string; fecha: string; generadores: { nombre: string } | null }>(() =>
-        supabase.from('manifiestos').select('id, numero, fecha, generadores(nombre)').eq('anulado', false)
+        supabase.from('manifiestos').select('id, numero, fecha, generadores(nombre)').eq('anulado', false).is('viaje_id', null)
           .gte('fecha', desde).lte('fecha', hasta).order('fecha').order('id')),
       supabase.from('alertas_vencimiento').select('tipo, id, nombre, documento, vto').gte('vto', desde).lte('vto', hasta),
       traerTodo<{ manifiesto_id: number; numero: string; generador: string; corriente: string; dias_restantes: number }>(() =>
