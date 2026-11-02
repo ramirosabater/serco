@@ -92,7 +92,8 @@ export const CIRCUITOS: Circuito[] = [
   {
     id: 'recorrido', titulo: 'Ver en qué etapa está un residuo', area: 'manifiestos', roles: INTERNOS,
     pasos: [
-      { ir: '/manifiestos', foco: 'man-buscar', titulo: 'Buscar', texto: 'Buscá el manifiesto por número, generador o corriente. Yo te abro uno de ejemplo.' },
+      { ir: '/manifiestos', foco: 'man-buscar', titulo: 'Buscar', texto: 'Buscá el manifiesto por número, generador o corriente.' },
+      { ir: '/manifiestos', foco: 'man-filtros', titulo: 'Filtrar', texto: 'O filtrá por fechas, planta, transportista, generador, corriente, formulario o etapa. Lo que filtres se puede exportar a Excel. Yo te abro uno de ejemplo.' },
       { ir: ':manifiesto', foco: 'det-recorrido', titulo: 'El recorrido', texto: 'Acá ves en qué etapa está: iniciado, almacenado, en tránsito, dispuesto o certificado entregado, con los papeles de cada una.', falta: 'No encuentro un manifiesto de ejemplo para mostrarte.' },
       { foco: 'texto:Historial de cambios', titulo: 'Historial', texto: 'Y más abajo queda quién hizo cada cosa y cuándo.' },
     ],

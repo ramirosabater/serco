@@ -231,7 +231,7 @@ function ArmarCarga() {
         <span className="muted small">{filas.length} residuos almacenados{fueraPlazo ? `, ${fueraPlazo} fuera de plazo` : ''}</span>
       </div>
       {error && <div className="aviso bad" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
-      {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok} {armado && <><Link to={`/nacion/${armado}/imprimir`}><b>Imprimir en el formulario azul</b></Link> · </>}<Link to="/planta?v=transito">Ver en tránsito</Link></div>}
+      {ok && <div className="aviso ok" role="status" style={{ marginBottom: 12 }}>{ok} {armado && <><Link to={`/nacion/${armado}/imprimir`}><b>Imprimir en el formulario azul</b></Link> · <Link to={`/nacion/${armado}/anexo`}>Imprimir anexo</Link> · </>}<Link to="/planta?v=transito">Ver en tránsito</Link></div>}
       <nav className="bar" aria-label="Cómo armar la carga">
         <span className="pestanas">
           <button type="button" className={modo === 'plan' ? 'on' : ''} onClick={() => setModo('plan')} data-ayuda="pl-tab-plan">Cargas sugeridas</button>

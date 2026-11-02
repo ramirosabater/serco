@@ -132,6 +132,7 @@ export default function NacionDetalle() {
             <div className="bar mt" style={{ marginBottom: 0 }}>
               {n.escaneo && <button onClick={() => abrirArchivo(n.escaneo, setError)}>Ver formulario firmado</button>}
               <Link to={`/nacion/${n.id}/imprimir`} data-ayuda="nac-imprimir"><button>Imprimir en el formulario azul</button></Link>
+              <Link to={`/nacion/${n.id}/anexo`} data-ayuda="nac-anexo"><button>Imprimir anexo (detalle por cliente)</button></Link>
             </div>
           </div>
 

@@ -32,7 +32,7 @@ test('subir un escaneo en una ficha y verlo', async ({ page, context }) => {
   await page.getByRole('cell', { name: PRUEBA, exact: true }).first().click()
   const fila = page.locator('tr', { hasText: 'Habilitación provincial' }).first()
   await fila.locator('input[type=file]').setInputFiles(PDF)
-  await expect.poll(() => pedidos.find((p) => p.tipo === 'subir')?.ruta ?? '').toMatch(/^habilitaciones\/transportistas\/\d+\/hab_pro_archivo-/)
+  await expect.poll(() => pedidos.find((p) => p.tipo === 'subir')?.ruta ?? '').toMatch(/^habilitaciones\/transportistas\/[A-Za-z0-9 ._-]+\/hab_pro_archivo-/)
   await expect(fila.getByRole('button', { name: 'Ver' })).toBeVisible()
   const pestana = context.waitForEvent('page')
   await fila.getByRole('button', { name: 'Ver' }).click()

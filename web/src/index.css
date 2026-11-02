@@ -595,3 +595,8 @@ h2 .explica, .titulo-explica .explica { margin-left: 8px; vertical-align: middle
   body.modo-certificado .cert-hoja { page: certificado; box-shadow: none; width: auto; min-height: 0; height: 266mm; overflow: hidden; padding: 0; break-after: page; }
   body.modo-certificado .cert-hoja:last-child { break-after: auto; }
 }
+.filtros .campo.check span { display: flex; gap: 6px; align-items: center; padding-bottom: 12px; font-weight: 600; }
+.cert-tabla .cert-sub td { font-weight: 700; background: #fafbfd; }
+.cert-hoja.libre { min-height: 0; }
+@media print { body.modo-certificado .cert-hoja.libre { height: auto; overflow: visible; } body.modo-certificado .cert-hoja.libre .cert-tabla tr { break-inside: avoid; } body.modo-certificado .cert-hoja.libre .cert-tabla thead { display: table-header-group; } }
+.cert-tabla .cert-total td { border-top: 1.5px solid #1d3d8f; border-bottom: 0; padding-top: 2mm; }

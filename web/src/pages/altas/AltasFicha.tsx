@@ -106,7 +106,10 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
     }
     setSubiendo(true)
     const ext = (f.name.split('.').pop() || 'pdf').toLowerCase()
-    const { guardado: ruta, error } = await subirArchivo(`habilitaciones/${tabla}/${id}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`, f)
+    // En el Drive: una carpeta por camión (patente) o por persona/empresa (nombre), dentro de la de cada tipo
+    const carpeta = String(valores.patente ?? valores.nombre ?? id).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9 ._-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || String(id)
+    const { guardado: ruta, error } = await subirArchivo(`habilitaciones/${tabla}/${carpeta}/${d.archivo}-${vence ?? 'sin-fecha'}-${Date.now()}.${ext}`, f)
     if (error || !ruta) { onError('No se pudo subir el archivo: ' + (error ?? 'sin respuesta')); setSubiendo(false); return }
     // El archivo y lo leído del certificado (vencimiento, DNI) se graban juntos
     const cambios: Valores = { [d.archivo]: ruta, ...leido }

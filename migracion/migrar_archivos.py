@@ -147,7 +147,8 @@ def main():
         idx.usados.add(local)
         ext = local.suffix.lstrip('.').lower() or 'pdf'
         if tipo == 'habilitacion':
-            destino = f"habilitaciones/{(carpeta or 'otros').lower()}/{re.sub(r'[^A-Za-z0-9._-]+', '_', local.name)}"
+            sub = {'vehiculos': 'camiones'}.get((carpeta or 'otros').lower(), (carpeta or 'otros').lower())
+            destino = f"habilitaciones/{sub}/{re.sub(r'[^A-Za-z0-9._-]+', '_', local.name)}"
         else:
             cur.execute('select ruta_documento(%s, %s, %s, %s)', (tipo, numero, op, ext))
             destino = cur.fetchone()[0]

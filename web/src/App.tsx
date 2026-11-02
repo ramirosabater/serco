@@ -17,8 +17,10 @@ import Configuracion from './pages/Configuracion'
 import { PortalRetiros, PortalCertificados } from './pages/Portal'
 import ElegirClave from './auth/ElegirClave'
 import SubirCertificado from './pages/SubirCertificado'
+import Privacidad from './pages/Privacidad'
 import CertificadosSerco from './pages/CertificadosSerco'
 import ImprimirCertificadoSerco from './pages/ImprimirCertificadoSerco'
+import ImprimirAnexoNacion from './pages/ImprimirAnexoNacion'
 import AltasLista from './pages/altas/AltasLista'
 import AltasFicha from './pages/altas/AltasFicha'
 import { devJwt } from './lib/supabase'
@@ -29,6 +31,8 @@ function Rutas() {
   if (window.location.pathname === '/elegir-clave') return <ElegirClave />
   // Desde el mail que le llega al chofer: página pública, sin usuario
   if (window.location.pathname.startsWith('/subir/')) return <SubirCertificado />
+  // Política de privacidad: pública (la pide Google para el permiso del Drive)
+  if (window.location.pathname === '/privacidad') return <Privacidad />
   if (cargando) return <p className="cargando" style={{ padding: 28 }}>Cargando…</p>
   if (sinPerfil) return (
     <div className="ingreso"><div className="card stack">
@@ -60,6 +64,7 @@ function Rutas() {
         <Route path="agenda" element={<Agenda />} />
         <Route path="nacion/:id" element={<NacionDetalle />} />
         <Route path="nacion/:id/imprimir" element={<ImprimirManifiesto viaje />} />
+        <Route path="nacion/:id/anexo" element={<ImprimirAnexoNacion />} />
         <Route path="certificados-serco" element={<CertificadosSerco />} />
         <Route path="certificados-serco/:numero" element={<ImprimirCertificadoSerco />} />
         <Route path="vista-cliente" element={<PortalRetiros />} />

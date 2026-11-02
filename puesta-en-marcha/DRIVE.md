@@ -9,7 +9,7 @@ certificados de choferes, lo que suben los choferes desde el enlace del mail).
 - Los archivos no tienen enlace público: para verlos, el sistema controla quién es y da un enlace que vence en 5 minutos.
 - Mientras Drive no esté conectado, los archivos nuevos van al Storage de Supabase (como hasta ahora) y siguen andando después.
 
-Son unos 20 minutos, una sola vez. Todo con la cuenta de Gmail de Serco.
+Son unos 20 minutos, una sola vez. Todo con la cuenta de Gmail de Serco: **ambientalserco@gmail.com**.
 
 ## 1. Proyecto en Google Cloud · 10 min
 
@@ -75,6 +75,22 @@ python migrar_archivos.py "C:\serco 26102026" "C:\RAYGROUP" --drive
 - Al terminar, correr de nuevo la validación: la hoja **Archivos** del Excel tiene que mostrar los subidos.
 
 Los listados `archivos_no_encontrados.csv` y `archivos_sin_documento.txt` quedan en esa carpeta y no van a GitHub.
+
+## 5. Documentos de la flota habilitada · 2 min
+
+Los carnets y certificados de cargas peligrosas que trajo Serco el 26/10 (6 camiones y 4 choferes) están en
+`C:\serco 26102026\documentos flota`. Primero, en el SQL Editor de Supabase, correr
+`puesta-en-marcha/actualizaciones/2026-11-02-flota-habilitada.sql` (habilita esos, controla las fechas e inhabilita el resto).
+Después, en PowerShell, en `C:\Apps\sgrp2\migracion`:
+
+```
+python cargar_documentos_flota.py "C:\serco 26102026\documentos flota"
+python cargar_documentos_flota.py "C:\serco 26102026\documentos flota" --drive
+```
+
+El primero solo muestra qué va a hacer; el segundo sube cada documento a
+`Gestión Serco · Documentos/habilitaciones/camiones/<patente>` o `.../choferes/<nombre>` y lo deja en la ficha.
+Los documentos que se suban después desde la ficha de cada camión o chofer van a esas mismas carpetas.
 
 ## Si algo falla
 

@@ -32,3 +32,13 @@ test('viaje: imprimir en el formulario azul', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Volver al Manifiesto Nación' })).toBeVisible()
   await sinAvisoDeError(page)
 })
+
+test('viaje: anexo con el detalle por cliente', async ({ page }) => {
+  await page.goto('/planta?v=nacion')
+  await page.locator('tr.fila').first().click()
+  await page.getByRole('button', { name: /Imprimir anexo/ }).click()
+  await expect(page).toHaveURL(/\/nacion\/\d+\/anexo$/)
+  await expect(page.locator('.cert-hoja')).toContainText('MANIFIESTO TRANSPORTE DE NACIÓN')
+  await expect(page.locator('.cert-total')).toContainText('Total Manifiesto')
+  await sinAvisoDeError(page)
+})
