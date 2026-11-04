@@ -101,13 +101,31 @@ def pedir_direccion():
     return d
 
 
+def sin_pausa_por_clic():
+    """En Windows, un clic en la ventana de PowerShell la deja "seleccionando" y el programa se frena al escribir.
+    Se apaga esa opción (QuickEdit) solo para esta ventana mientras corre el script."""
+    if os.name != 'nt': return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetStdHandle(-10)                      # entrada de la consola
+        modo = ctypes.c_uint32()
+        if k.GetConsoleMode(h, ctypes.byref(modo)):
+            k.SetConsoleMode(h, (modo.value & ~0x0040) | 0x0080)   # sin QuickEdit (0x40), con modos extendidos (0x80)
+    except Exception:
+        pass
+
+
 def main():
+    sin_pausa_por_clic()
     raices = [a for a in sys.argv[1:] if not a.startswith('--')]
     if not raices: sys.exit(__doc__)
     for r in raices:
         if not os.path.isdir(r): sys.exit(f'No encuentro la carpeta {r}')
     a_drive = '--drive' in sys.argv
-    db = psycopg2.connect(pedir_direccion(), connect_timeout=20); cur = db.cursor()
+    dsn = pedir_direccion()
+    conectar = lambda: psycopg2.connect(dsn, connect_timeout=20, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
+    db = conectar(); cur = db.cursor()
     print('Buscando los archivos en ' + ', '.join(raices) + '…')
     idx = Indice(raices)
     print(f'Archivos encontrados: {idx.total}')
@@ -141,6 +159,12 @@ def main():
         if tipo != 'habilitacion' and not carpeta:
             carpeta = {'manifiesto': 'Manifiestos', 'nacion': 'ManifiestosNacion', 'certificado': 'CertDispFinal'}[tipo]
         local, como = idx.buscar(carpeta, nombre, numero)
+        mismo_que_retiro = False
+        if not local and tipo == 'nacion':
+            # Viaje directo (sobre todo hasta 2020): el Manifiesto Nación lleva el número del manifiesto del retiro
+            # y el escaneo es el mismo papel, guardado en Manifiestos. Se usa ese mismo archivo (no se sube dos veces).
+            local, como = idx.buscar('Manifiestos', nombre, numero)
+            if local: como, mismo_que_retiro = 'manifiesto_del_retiro', True
         if not local:
             resumen[tipo]['no_encontrado'] += 1
             faltan.append((tabla, i, numero, ruta)); continue
@@ -149,18 +173,29 @@ def main():
         if tipo == 'habilitacion':
             sub = {'vehiculos': 'camiones'}.get((carpeta or 'otros').lower(), (carpeta or 'otros').lower())
             destino = f"habilitaciones/{sub}/{re.sub(r'[^A-Za-z0-9._-]+', '_', local.name)}"
-        else:
-            cur.execute('select ruta_documento(%s, %s, %s, %s)', (tipo, numero, op, ext))
-            destino = cur.fetchone()[0]
+        else:   # la ruta la arma la base, todas juntas más abajo
+            destino = ('manifiesto', numero, None, ext) if mismo_que_retiro else (tipo, numero, op, ext)
         resumen[tipo]['encontrado_por_' + como] += 1
-        plan.append((tabla, col, i, ruta, local, destino, como))
+        plan.append([tabla, col, i, ruta, local, destino, como])
 
-    # Registro en migracion_archivos
-    for tabla, col, i, ruta, local, destino, como in plan:
-        if ruta:
-            cur.execute("""update migracion_archivos set encontrado = true, archivo_local = %s, como = %s,
-                           bytes = %s where ruta_access = %s and subido is null""",
-                        (idx.relativo(local), como, local.stat().st_size, ruta))
+    # Rutas de manifiestos, Manifiestos Nación y certificados: una sola consulta para todos
+    # (de a una eran ~45.000 viajes a la base: horas)
+    pend = [(k, *p[5]) for k, p in enumerate(plan) if isinstance(p[5], tuple)]
+    if pend:
+        print(f'Armando las rutas de {len(pend)} documentos…')
+        cur.execute("""select x.k, ruta_documento(x.t, x.n, x.o, x.e)
+                       from unnest(%s::int[], %s::text[], %s::text[], %s::bigint[], %s::text[]) as x(k, t, n, o, e)""",
+                    ([a[0] for a in pend], [a[1] for a in pend], [a[2] for a in pend], [a[3] for a in pend], [a[4] for a in pend]))
+        for k, r in cur.fetchall(): plan[k][5] = r
+    plan = [tuple(p) for p in plan]
+
+    # Registro en migracion_archivos (todo junto)
+    print('Anotando lo encontrado…')
+    from psycopg2.extras import execute_values
+    filas = [(ruta, idx.relativo(local), 'numero' if como == 'numero' else 'ruta', local.stat().st_size) for _, _, _, ruta, local, _, como in plan if ruta]
+    execute_values(cur, """update migracion_archivos m set encontrado = true, archivo_local = v.local, como = v.como, bytes = v.bytes
+                            from (values %s) as v(ruta, local, como, bytes)
+                            where m.ruta_access = v.ruta and m.subido is null""", filas, page_size=2000)
     db.commit()
 
     huerfanos = sorted(idx.relativo(f) for c in idx.por_nombre.values() for l in c.values() for f in l if f not in idx.usados)
@@ -186,8 +221,12 @@ def main():
 
     def subir(destino, local):
         ruta_carpeta, _, nombre = destino.rpartition('/')
+        padre = carpetas.id(ruta_carpeta)
+        # Si ya se subió en una corrida que se cortó antes de anotarlo, se usa ese (no se sube dos veces)
+        ya = d.buscar_archivo(nombre, padre)
+        if ya: return 'drive:' + ya
         mime = mimetypes.guess_type(str(local))[0] or 'application/octet-stream'
-        return 'drive:' + d.subir(nombre, carpetas.id(ruta_carpeta), str(local), mime)
+        return 'drive:' + d.subir(nombre, padre, str(local), mime)
 
     errores, hechos, t0 = [], 0, __import__('time').time()
     bytes_hechos = 0
@@ -199,17 +238,25 @@ def main():
                 guardado = f.result()
             except Exception as e:
                 errores.append((destino, str(e))); continue
-            # Se anota apenas sube: si se corta, lo subido no se vuelve a subir
-            for tabla, col, i, ruta, local, _, _ in por_destino[destino]:
-                cur.execute(f'update {tabla} set {col} = %s where id = %s', (guardado, i))
-                if ruta: cur.execute('update migracion_archivos set storage_path = %s, subido = coalesce(subido, now()) where ruta_access = %s', (guardado, ruta))
+            # Se anota y se guarda apenas sube: si se corta, lo subido no se vuelve a subir.
+            # Si la conexión con la base se cayó (pasa en corridas largas), se reconecta y se reintenta.
+            for intento in range(3):
+                try:
+                    for tabla, col, i, ruta, local, _, _ in por_destino[destino]:
+                        cur.execute(f'update {tabla} set {col} = %s where id = %s', (guardado, i))
+                        if ruta: cur.execute('update migracion_archivos set storage_path = %s, subido = coalesce(subido, now()) where ruta_access = %s', (guardado, ruta))
+                    db.commit(); break
+                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    if intento == 2: raise SystemExit(f'Se perdió la conexión con la base ({e}). Volvé a correr el mismo comando: sigue donde quedó.')
+                    print('  (se cortó la conexión con la base: reconectando…)')
+                    try: db.close()
+                    except Exception: pass
+                    db = conectar(); cur = db.cursor(); carpetas.db = db
             hechos += 1; bytes_hechos += pendientes[destino].stat().st_size
-            if n % 50 == 0 or n == len(fut):
-                db.commit()
+            if n % 25 == 0 or n == len(fut):
                 seg = __import__('time').time() - t0
                 falta = (total_bytes - bytes_hechos) / (bytes_hechos / seg) if bytes_hechos else 0
-                print(f'  {n}/{len(fut)} · {bytes_hechos / 1e9:.2f} de {total_bytes / 1e9:.2f} GB · faltan unos {falta / 60:.0f} min')
-    db.commit()
+                print(f'  {__import__("time").strftime("%H:%M")}  {n}/{len(fut)} · {bytes_hechos / 1e9:.2f} de {total_bytes / 1e9:.2f} GB · faltan unos {falta / 60:.0f} min', flush=True)
     print(f'Subidos: {hechos} · errores: {len(errores)}')
     if errores:
         Path('archivos_con_error.txt').write_text('\n'.join(f'{d}: {e}' for d, e in errores), encoding='utf-8')

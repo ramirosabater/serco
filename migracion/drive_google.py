@@ -23,20 +23,20 @@ def leer_claves(ruta=ARCHIVO_CLAVES):
     return claves
 
 
-def pedir(url, datos=None, metodo=None, cabeceras=None, intentos=6):
+def pedir(url, datos=None, metodo=None, cabeceras=None, intentos=5, espera=120):
     """Pedido HTTP con reintentos (Google limita la velocidad: se espera y se vuelve a probar)"""
     for n in range(intentos):
         req = urllib.request.Request(url, data=datos, method=metodo, headers=cabeceras or {})
         try:
-            with urllib.request.urlopen(req, timeout=300) as r:
+            with urllib.request.urlopen(req, timeout=espera) as r:
                 return r.status, dict(r.headers), r.read()
         except urllib.error.HTTPError as e:
             cuerpo = e.read()
             if e.code in (403, 429, 500, 502, 503, 504) and n < intentos - 1 and (e.code != 403 or b'ateLimit' in cuerpo):
                 time.sleep(min(60, 2 ** n + 0.5)); continue
             raise RuntimeError(f'{e.code} {cuerpo[:300].decode("utf-8", "replace")}')
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            if n < intentos - 1: time.sleep(min(60, 2 ** n + 0.5)); continue
+        except (urllib.error.URLError, TimeoutError, OSError) as e:   # incluye cortes de red y SSL
+            if n < intentos - 1: time.sleep(min(30, 2 ** n + 0.5)); continue
             raise RuntimeError(f'Sin conexión con Google: {e}')
 
 
@@ -69,6 +69,29 @@ class Drive:
         _, _, b = self.api('/drive/v3/files?fields=id', json.dumps(meta).encode(), 'POST', {'Content-Type': 'application/json'})
         return json.loads(b)['id']
 
+    def buscar_archivo(self, nombre, padre):
+        """Id de un archivo con ese nombre en esa carpeta (subido antes por el sistema), o None"""
+        q = f"name = '{nombre.replace(chr(92), chr(92) * 2).replace(chr(39), chr(92) + chr(39))}' and '{padre}' in parents and trashed = false"
+        _, _, b = self.api('/drive/v3/files?' + urllib.parse.urlencode({'q': q, 'fields': 'files(id)', 'pageSize': 1}))
+        f = json.loads(b)['files']
+        return f[0]['id'] if f else None
+
+    def listar_archivos(self):
+        """Todos los archivos (no carpetas) que subió el sistema y no están en la papelera"""
+        q = "trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+        token, todos = None, []
+        while True:
+            params = {'q': q, 'fields': 'nextPageToken,files(id,name,size,parents,createdTime)', 'pageSize': 1000}
+            if token: params['pageToken'] = token
+            _, _, b = self.api('/drive/v3/files?' + urllib.parse.urlencode(params))
+            j = json.loads(b)
+            todos += j.get('files', [])
+            token = j.get('nextPageToken')
+            if not token: return todos
+
+    def a_la_papelera(self, fid):
+        self.api(f'/drive/v3/files/{fid}', json.dumps({'trashed': True}).encode(), 'PATCH', {'Content-Type': 'application/json'})
+
     def subir(self, nombre, padre, local, mime):
         """Subida reanudable: sirve para archivos de cualquier tamaño. Devuelve el id del archivo en Drive."""
         tam = os.path.getsize(local)
@@ -78,7 +101,8 @@ class Drive:
         destino = h.get('Location') or h.get('location')
         with open(local, 'rb') as fh:
             datos = fh.read()
-        _, _, b = pedir(destino, datos, 'PUT', {'Content-Type': mime, 'Content-Length': str(tam)})
+        # tiempo de espera según el tamaño (conexiones lentas): nunca menos de 2 minutos
+        _, _, b = pedir(destino, datos, 'PUT', {'Content-Type': mime, 'Content-Length': str(tam)}, espera=max(120, tam // 20000))
         return json.loads(b)['id']
 
 

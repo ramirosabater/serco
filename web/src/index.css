@@ -600,3 +600,4 @@ h2 .explica, .titulo-explica .explica { margin-left: 8px; vertical-align: middle
 .cert-hoja.libre { min-height: 0; }
 @media print { body.modo-certificado .cert-hoja.libre { height: auto; overflow: visible; } body.modo-certificado .cert-hoja.libre .cert-tabla tr { break-inside: avoid; } body.modo-certificado .cert-hoja.libre .cert-tabla thead { display: table-header-group; } }
 .cert-tabla .cert-total td { border-top: 1.5px solid #1d3d8f; border-bottom: 0; padding-top: 2mm; }
+.salvado { color: var(--haz, #b45309); font-weight: 800; cursor: help; }

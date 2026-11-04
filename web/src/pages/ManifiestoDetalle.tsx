@@ -6,10 +6,11 @@ import type { Item, Manifiesto, UM } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
 import { colorEtapa, PillEtapa } from '../components/Etapa'
 import { abrirArchivo } from '../lib/archivos'
+import { traerTodo } from '../lib/paginar'
 
 const SELECT = `*, generadores(id, nombre, cuit), generadores_principales(nombre), transportistas(id, nombre),
   choferes(nombre), camiones(patente),
-  manifiesto_items(id, corriente_id, contenedor, cant_estimada, cantidad, um, estado, fecha_entrega_df, corrientes(codigo, descripcion),
+  manifiesto_items(id, corriente_id, contenedor, cant_estimada, cantidad, um, estado, fecha_entrega_df, salvado, corrientes(codigo, descripcion),
     manifiestos_nacion(id, numero, fecha, escaneo, operadores(nombre)), certificados(id, numero, fecha, archivo, enviado_cliente, operadores(nombre)))`
 
 export default function ManifiestoDetalle() {
@@ -21,6 +22,9 @@ export default function ManifiestoDetalle() {
   const [anulando, setAnulando] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [corrigiendo, setCorrigiendo] = useState(false)
+  const [bloqueo, setBloqueo] = useState<string | null>(null)
+  const [corrigiendoDatos, setCorrigiendoDatos] = useState(false)
+  const [salvando, setSalvando] = useState<number | null>(null)
 
   const cargar = () => supabase.from('manifiestos').select(SELECT).eq('id', Number(id)).maybeSingle()
     .then(({ data, error }) => {
@@ -29,6 +33,8 @@ export default function ManifiestoDetalle() {
       setM(data as unknown as Manifiesto)
     })
   useEffect(() => { cargar() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Si el libro provincial de ese período ya se presentó, no se corrige ni se anula
+  useEffect(() => { supabase.rpc('manifiesto_bloqueo', { p_id: Number(id) }).then(({ data }) => setBloqueo((data as string | null) ?? null)) }, [id])
 
   async function anular(e: FormEvent) {
     e.preventDefault()
@@ -50,8 +56,13 @@ export default function ManifiestoDetalle() {
     cert ? `${cert.operadores?.nombre ?? ''} · ${fd(cert.fecha)}` : nacion?.operadores ? `Destino ${nacion.operadores.nombre}` : 'Pendiente',
     enviado ? `Enviado al cliente ${fd(cert?.enviado_cliente?.slice(0, 10))}` : cert ? `Certificado ${cert.numero}, sin enviar` : 'Pendiente',
   ]
-  const anulable = puedeEditar && !m.anulado && items.every((i) => i.estado === 'almacenado')
-  const cargarSec3 = puedeEditar && !m.anulado && (items.length === 0 || (corrigiendo && anulable))
+  // Reglas de Serco: se anula en cualquier etapa; la sección 3 entera se corrige mientras está en planta;
+  // la cantidad se salva con * hasta que llega el certificado; generador y dirección, siempre. Nada si se presentó a provincia.
+  const editable = puedeEditar && !m.anulado && !bloqueo && perfil?.rol !== 'cliente'
+  const anulable = editable
+  const enPlanta = items.every((i) => i.estado === 'almacenado')
+  const cargarSec3 = puedeEditar && !m.anulado && (items.length === 0 || (corrigiendo && editable && enPlanta))
+  const yaSalio = items.some((i) => i.manifiestos_nacion || i.certificados)
 
   return (
     <>
@@ -66,6 +77,7 @@ export default function ManifiestoDetalle() {
       <p className="sub">{m.generadores?.nombre} · transporta {m.transportistas?.nombre} · formulario {m.tipo}</p>
       {error && <div className="aviso bad" style={{ marginBottom: 12 }}>{error}</div>}
       {m.anulado && <div className="aviso bad" style={{ marginBottom: 12 }}>Anulado. Motivo: {m.anulado_motivo}</div>}
+      {bloqueo && !m.anulado && perfil?.rol !== 'cliente' && <div className="aviso" style={{ marginBottom: 12 }}>{bloqueo}</div>}
       {m.viaje_id && <div className="aviso" style={{ marginBottom: 12 }}>Es el formulario del viaje <Link to={`/nacion/${m.viaje_id}`}>Manifiesto Nación {fnum(m.numero)}</Link>, que en el Access se cargaba también como manifiesto, con el total en un renglón. No cuenta como retiro: esos residuos ya están en los manifiestos de los clientes que van en el viaje.</div>}
       {m.validacion_omitida && <div className="aviso haz" style={{ marginBottom: 12 }}>Emitido con vencimientos sin regularizar. Motivo: {m.validacion_omitida}</div>}
 
@@ -98,7 +110,8 @@ export default function ManifiestoDetalle() {
                 <td><b>{i.corrientes?.codigo}</b><div className="muted small">{i.corrientes?.descripcion}</div></td>
                 <td>{i.contenedor ?? '—'}</td>
                 <td className="n muted">{i.cant_estimada != null ? num(i.cant_estimada) : '—'}</td>
-                <td className="n">{num(i.cantidad)} {umL(i.um)}</td>
+                <td className="n">{num(i.cantidad)} {umL(i.um)}{i.salvado && <span className="salvado" title={`Salvado: ${i.salvado}`}> *</span>}
+                  {editable && !corrigiendo && !i.certificados && salvando !== i.id && <div><button className="link small" onClick={() => setSalvando(i.id)} title="Corregir la cantidad (queda salvada con *)">Salvar *</button></div>}</td>
                 <td><PillEtapa etapa={i.estado === 'disposicion_final' && i.certificados?.enviado_cliente ? 4 : etapaDe(i.estado)} /></td>
                 <td className="nw">{i.manifiestos_nacion ? (perfil?.rol === 'cliente' ? fnum(i.manifiestos_nacion.numero) : <Link to={`/nacion/${i.manifiestos_nacion.id}`}>{fnum(i.manifiestos_nacion.numero)}</Link>) : '—'}</td>
                 <td className="nw">{i.certificados
@@ -106,8 +119,10 @@ export default function ManifiestoDetalle() {
               </tr>))}
             </tbody>
           </table></div>
+          {salvando && <SalvarCantidad item={items.find((i) => i.id === salvando)!} onListo={() => { setSalvando(null); cargar() }} onCancelar={() => setSalvando(null)} />}
+          {items.some((i) => i.salvado) && <p className="small muted" style={{ marginBottom: 0 }}>* Cantidad salvada: {items.filter((i) => i.salvado).map((i) => `${i.corrientes?.codigo} ${i.salvado}`).join(' · ')}</p>}
           {items.length === 0 && <p className="muted small">Todavía no se cargó la sección 3: se completa cuando la carga entra a planta.</p>}
-          {items.length > 0 && anulable && puedeEditar && !corrigiendo && <div className="bar mt"><button onClick={() => setCorrigiendo(true)}>Corregir residuos</button>
+          {items.length > 0 && editable && enPlanta && !corrigiendo && <div className="bar mt"><button onClick={() => setCorrigiendo(true)}>Corregir residuos</button>
             {m.ingreso_planta && <span className="muted small">Ingresó a planta el {fd(m.ingreso_planta)}</span>}</div>}
         </div>
         <div className="card">
@@ -120,14 +135,17 @@ export default function ManifiestoDetalle() {
             <dt className="muted">Camión</dt><dd style={{ margin: 0 }}>{m.camiones?.patente ?? '—'}</dd>
             {m.nota && <><dt className="muted">Nota</dt><dd style={{ margin: 0 }}>{m.nota}</dd></>}
           </dl>
+          {corrigiendoDatos && <CorregirDatos m={m} onListo={() => { setCorrigiendoDatos(false); cargar() }} onCancelar={() => setCorrigiendoDatos(false)} />}
           <div className="bar mt">
             {puedeEditar && m.tipo === 'azul' && !m.anulado && <Link to={`/manifiestos/${m.id}/imprimir`} data-ayuda="det-imprimir"><button>Imprimir en el formulario</button></Link>}
             {puedeEditar && !m.anulado && <Link to={`/manifiestos/${m.id}/etiquetas`} data-ayuda="det-etiquetas"><button>Etiquetas</button></Link>}
             {m.escaneo && <button onClick={() => abrirArchivo(m.escaneo, setError)}>Ver escaneo firmado</button>}
+            {editable && !corrigiendoDatos && <button onClick={() => setCorrigiendoDatos(true)} data-ayuda="det-corregir">Corregir generador o dirección</button>}
             {anulable && !anulando && <button className="peligro" onClick={() => setAnulando(true)}>Anular manifiesto</button>}
           </div>
           {anulando && (
             <form className="stack" onSubmit={anular}>
+              {yaSalio && <div className="aviso haz">Este manifiesto ya viajó{items.some((i) => i.certificados) ? ' y tiene certificado del operador' : ''}. Al anularlo deja de contar como retiro en reportes y libros; el viaje y el certificado no se modifican.</div>}
               <label className="campo">Motivo de la anulación
                 <input required value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: formulario mal completado" autoFocus />
               </label>
@@ -137,6 +155,79 @@ export default function ManifiestoDetalle() {
       </div>
     </>
   )
+}
+
+/** Salvar la cantidad de un residuo con * (como en el papel): queda el valor anterior y el motivo */
+function SalvarCantidad({ item, onListo, onCancelar }: { item: Item & { corrientes?: { codigo: string } | null }; onListo: () => void; onCancelar: () => void }) {
+  const [cantidad, setCantidad] = useState(String(item.cantidad).replace('.', ','))
+  const [motivo, setMotivo] = useState('')
+  const [error, setError] = useState('')
+  async function guardar(e: FormEvent) {
+    e.preventDefault()
+    const n = numero(cantidad)
+    if (!n || n <= 0) { setError('Poné una cantidad mayor a cero'); return }
+    const { error } = await supabase.rpc('salvar_cantidad', { p_item: item.id, p_cantidad: n, p_motivo: motivo })
+    if (error) setError(mensajeError(error)); else onListo()
+  }
+  return (
+    <form className="stack mt" onSubmit={guardar} style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <b>Salvar la cantidad de {item.corrientes?.codigo} con *</b>
+      <div className="bar">
+        <label className="campo">Cantidad correcta ({umL(item.um)})<input value={cantidad} onChange={(e) => setCantidad(e.target.value)} inputMode="decimal" required autoFocus /></label>
+        <label className="campo" style={{ flex: 1 }}>Motivo<input value={motivo} onChange={(e) => setMotivo(e.target.value)} required placeholder="Ej.: pesada de balanza" /></label>
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>Antes: {num(item.cantidad)} {umL(item.um)}. Queda marcado con * y en el historial. Después de que llega el certificado del operador ya no se salva: se anula.</p>
+      {error && <div className="aviso bad">{error}</div>}
+      <div className="bar"><button className="pri">Guardar</button><button type="button" onClick={onCancelar}>Cancelar</button></div>
+    </form>)
+}
+
+/** Corregir el generador (se equivocaron de cliente) o la dirección de retiro, en cualquier etapa */
+function CorregirDatos({ m, onListo, onCancelar }: { m: Manifiesto; onListo: () => void; onCancelar: () => void }) {
+  const [gens, setGens] = useState<{ id: number; nombre: string; cuit: string | null; direccion: string | null }[]>([])
+  const [texto, setTexto] = useState(m.generadores?.nombre ?? '')
+  const [gen, setGen] = useState<number | null>(m.generadores?.id ?? null)
+  const [direccion, setDireccion] = useState(m.direccion_retiro ?? '')
+  const [dirs, setDirs] = useState<string[]>([])
+  const [motivo, setMotivo] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    traerTodo<{ id: number; nombre: string; cuit: string | null; direccion: string | null }>(() =>
+      supabase.from('generadores').select('id, nombre, cuit, direccion').eq('activo', true).order('nombre').order('id')).then(({ data }) => setGens(data))
+  }, [])
+  useEffect(() => {
+    if (!gen) { setDirs([]); return }
+    supabase.from('generador_direcciones').select('direccion').eq('generador_id', gen).then(({ data }) => setDirs((data ?? []).map((d) => d.direccion)))
+  }, [gen])
+  const elegido = gens.find((g) => g.id === gen)
+  async function guardar(e: FormEvent) {
+    e.preventDefault()
+    if (!gen) { setError('Elegí el generador de la lista'); return }
+    const { error } = await supabase.rpc('corregir_manifiesto', { p_id: m.id, p_generador: gen, p_direccion: direccion, p_motivo: motivo })
+    if (error) setError(mensajeError(error)); else onListo()
+  }
+  return (
+    <form className="stack mt" onSubmit={guardar} style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <b>Corregir generador o dirección de retiro</b>
+      <label className="campo">Generador (razón social y CUIT)
+        <input list="cor-generadores" value={texto} required onChange={(e) => {
+          setTexto(e.target.value)
+          const g = gens.find((x) => x.nombre === e.target.value)
+          setGen(g?.id ?? null)
+          if (g && g.id !== m.generadores?.id) setDireccion(g.direccion ?? '')
+        }} />
+        <datalist id="cor-generadores">{gens.map((g) => <option key={g.id} value={g.nombre}>{g.cuit ?? ''}</option>)}</datalist>
+        <span className="ayuda">{elegido ? `CUIT ${elegido.cuit ?? 'sin cargar'}` : 'Elegí un generador de la lista'}</span>
+      </label>
+      <label className="campo">Dirección de retiro
+        <input list="cor-direcciones" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+        <datalist id="cor-direcciones">{[elegido?.direccion, ...dirs].filter(Boolean).map((d) => <option key={d!} value={d!} />)}</datalist>
+      </label>
+      <label className="campo">Motivo<input value={motivo} onChange={(e) => setMotivo(e.target.value)} required placeholder="Ej.: se cargó el cliente equivocado" /></label>
+      <p className="muted small" style={{ margin: 0 }}>Se puede en cualquier etapa, mientras el libro provincial de ese período no se haya presentado. Queda en el historial.</p>
+      {error && <div className="aviso bad">{error}</div>}
+      <div className="bar"><button className="pri">Guardar corrección</button><button type="button" onClick={onCancelar}>Cancelar</button></div>
+    </form>)
 }
 
 interface Corriente { id: number; codigo: string; descripcion: string | null; um: UM | null }
@@ -281,7 +372,7 @@ function Documentos({ m, abrir, cliente }: { m: Manifiesto; abrir: (ruta: string
 interface Evento { fecha: string; usuario: string; tabla: string; registro: string; accion: string; cambios: Record<string, unknown> | null; antes: Record<string, unknown> | null }
 const CAMPOS: Record<string, string> = {
   fecha: 'fecha', generador_id: 'generador', direccion_retiro: 'dirección', chofer_id: 'chofer', camion_id: 'camión', nota: 'nota',
-  generador_principal_id: 'planta', instrucciones: 'instrucciones', cantidad: 'cantidad', contenedor: 'contenedor', corriente_id: 'corriente', um: 'unidad',
+  generador_principal_id: 'planta', instrucciones: 'instrucciones', cantidad: 'cantidad', contenedor: 'contenedor', corriente_id: 'corriente', um: 'unidad', salvado: 'cantidad salvada (*)', anulado: 'anulado', anulado_motivo: 'motivo de anulación',
 }
 const ESTADOS: Record<string, string> = { almacenado: 'volvió a almacenado', en_transito: 'pasó a en tránsito', disposicion_final: 'quedó dispuesto' }
 

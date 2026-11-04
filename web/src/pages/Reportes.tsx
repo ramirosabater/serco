@@ -7,6 +7,7 @@ import { fd, fnum, hoy, num, umL } from '../lib/formato'
 import type { UM } from '../lib/tipos'
 import Explica, { ExplicarTodo } from '../components/Explica'
 import type { Paso } from '../lib/guias'
+import { useAuth } from '../auth/AuthProvider'
 
 const REPORTES: Record<string, [string, string]> = {
   producto: ['Cantidad por producto', 'Kilos y litros por corriente, por semana, quincena o mes.'],
@@ -236,10 +237,44 @@ function LibroMovimientos({ tipo }: { tipo: 'provincial' | 'transporte' }) {
         {cargando ? <p className="cargando">Cargando…</p> : filas.length === 0 ? <p className="vacio">Sin movimientos en el período.</p>
           : <Tabla cols={cols} filas={conReg} clase={(f) => (f.formulario_viaje ? 'muted' : undefined)} />}
         {totales.length > 0 && <p style={{ marginBottom: 0 }}><b>Total:</b> {totales.map(([u, v]) => `${num(Math.round(v))} ${umL(u)}`).join(' · ')}{formularios > 0 && <span className="muted small"> · sin los {num(formularios)} renglones de formularios de viaje, que ya están en los manifiestos de los clientes</span>}</p>}
+        {tipo === 'provincial' && filtro && !nacion && <Presentado planta={Number(filtro)} desde={d} hasta={h} desdeReg={inicial} hastaReg={inicial + filas.length - 1} hay={filas.length > 0} />}
         {tipo === 'provincial' && filas.length > 0 && <p className="small muted no-imprimir" style={{ marginBottom: 0 }}>Registros del {num(inicial)} al {num(inicial + filas.length - 1)}. Al imprimir, esta computadora recuerda que el próximo libro arranca en el {num(inicial + filas.length)}.</p>}
       </div>
     </>
   )
+}
+
+/** Libro provincial presentado a provincia: desde ahí, los manifiestos de ese período no se corrigen ni se anulan */
+interface Periodo { id: number; desde: string; hasta: string; presentado: string; registro_desde: number | null; registro_hasta: number | null }
+function Presentado({ planta, desde, hasta, desdeReg, hastaReg, hay }: { planta: number; desde: string; hasta: string; desdeReg: number; hastaReg: number; hay: boolean }) {
+  const { perfil } = useAuth()
+  const admin = perfil?.rol === 'admin'
+  const [lista, setLista] = useState<Periodo[]>([])
+  const [confirmar, setConfirmar] = useState(false)
+  const [error, setError] = useState('')
+  const cargar = () => supabase.from('periodos_presentados').select('id, desde, hasta, presentado, registro_desde, registro_hasta')
+    .eq('generador_principal_id', planta).order('hasta', { ascending: false }).limit(6).then(({ data }) => setLista((data ?? []) as Periodo[]))
+  useEffect(() => { cargar(); setConfirmar(false) }, [planta]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cruza = lista.filter((p) => p.desde <= hasta && p.hasta >= desde)
+  async function marcar() {
+    const { error } = await supabase.rpc('marcar_presentado', { p_planta: planta, p_desde: desde, p_hasta: hasta, p_registro_desde: hay ? desdeReg : null, p_registro_hasta: hay ? hastaReg : null })
+    setError(mensajeError(error)); setConfirmar(false); cargar()
+  }
+  async function deshacer(id: number) {
+    const { error } = await supabase.rpc('desmarcar_presentado', { p_id: id }); setError(mensajeError(error)); cargar()
+  }
+  return (
+    <div className="no-imprimir mt" data-ayuda="rep-presentado" style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      {cruza.length > 0
+        ? <p className="small" style={{ margin: '0 0 6px' }}><b>Presentado a provincia:</b> {cruza.map((p) => `del ${fd(p.desde)} al ${fd(p.hasta)} (el ${fd(p.presentado)})`).join(' · ')}. Esos manifiestos ya no se pueden corregir ni anular.</p>
+        : admin && hay && !confirmar && <button onClick={() => setConfirmar(true)}>Marcar como presentado a provincia</button>}
+      {confirmar && <div className="aviso haz">Se marca el libro del {fd(desde)} al {fd(hasta)}{hay ? ` (registros ${num(desdeReg)} al ${num(hastaReg)})` : ''} como presentado a provincia. Desde ahora, los manifiestos de esa planta y esas fechas no se van a poder corregir ni anular.
+        <div className="bar" style={{ marginTop: 8 }}><button className="pri" onClick={marcar}>Sí, ya se presentó</button><button onClick={() => setConfirmar(false)}>Cancelar</button></div></div>}
+      {lista.length > 0 && <details className="small" style={{ marginTop: 6 }}><summary>Libros presentados de esta planta</summary>
+        <ul style={{ margin: '6px 0 0' }}>{lista.map((p) => <li key={p.id}>Del {fd(p.desde)} al {fd(p.hasta)} · presentado el {fd(p.presentado)}{p.registro_desde ? ` · registros ${num(p.registro_desde)} al ${num(p.registro_hasta ?? p.registro_desde)}` : ''}
+          {admin && <> · <button className="link small" onClick={() => deshacer(p.id)}>deshacer (si fue un error)</button></>}</li>)}</ul></details>}
+      {error && <div className="aviso bad">{error}</div>}
+    </div>)
 }
 
 // ---------------------------------------------------------------- Libro Nación

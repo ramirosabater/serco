@@ -17,6 +17,8 @@ export interface Item {
   um: UM
   estado: EstadoResiduo
   fecha_entrega_df: string | null
+  /** Cantidad salvada con * (valor anterior, motivo y fecha) */
+  salvado?: string | null
   corrientes?: { codigo: string; descripcion: string | null } | null
   manifiestos_nacion?: { id: number; numero: string; fecha: string; escaneo?: string | null; operadores?: { nombre: string } | null } | null
   certificados?: { id: number; numero: string; fecha: string; archivo: string | null; enviado_cliente?: string | null; operadores?: { nombre: string } | null } | null

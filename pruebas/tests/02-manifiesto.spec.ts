@@ -69,3 +69,17 @@ test('emitir, cargar la sección 3, corregirla y anular', async ({ page }) => {
   await expect(page.locator('.pill', { hasText: 'Anulado' }).first()).toBeVisible()
   await expect(page.getByText('Anulado. Motivo: PRUEBA AUTOMÁTICA')).toBeVisible()   // el cartel rojo de anulado es el esperado
 })
+
+// Solo mira: no corrige ni anula (las correcciones cambian datos reales)
+test('corregir: generador o dirección y salvar cantidad con * están disponibles', async ({ page }) => {
+  await page.goto('/manifiestos?etapa=2')
+  await page.locator('tbody tr').first().click()
+  await expect(page).toHaveURL(/\/manifiestos\/\d+$/)
+  const bloqueado = await page.getByText(/Ya se presentó a provincia/).count()
+  if (bloqueado) return
+  await page.getByRole('button', { name: 'Corregir generador o dirección' }).click()
+  await expect(page.getByLabel('Motivo')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(page.getByRole('button', { name: 'Salvar *' }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Anular manifiesto' })).toBeVisible()
+})
