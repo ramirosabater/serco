@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   pruebas:
-    runs-on: ubuntu-latest
+    # Ubuntu fijo: el "latest" pasó a 26.04 y la versión de Playwright que usamos todavía no tiene navegador para esa
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       BASE_URL: https://sercosa.netlify.app
