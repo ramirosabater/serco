@@ -20,17 +20,29 @@ setup('entrar al sistema', async ({ page }) => {
   const mail = page.locator('input[type=email]')
   // En una copia local con sesión de desarrollo no aparece el ingreso
   if (await mail.isVisible({ timeout: 8_000 }).catch(() => false)) {
-    const email = process.env.PRUEBA_EMAIL, clave = process.env.PRUEBA_CLAVE
+    const email = process.env.PRUEBA_EMAIL?.trim(), clave = process.env.PRUEBA_CLAVE?.trim()
     if (!email || !clave) throw new Error('Falta PRUEBA_EMAIL o PRUEBA_CLAVE en pruebas/.env (ver LEEME.md)')
-    await mail.fill(email)
-    await page.locator('input[type=password]').fill(clave)
+    const pass = page.locator('input[type=password]')
+    // Esperar a que la página termine de cargar: si se escribe antes, al redibujarse borra lo escrito
+    await page.waitForLoadState('networkidle')
+    for (let intento = 0; intento < 3; intento++) {
+      await mail.fill(email)
+      await pass.fill(clave)
+      if (await mail.inputValue() === email && await pass.inputValue() === clave) break
+      await page.waitForTimeout(1000)
+    }
+    await expect(mail, 'el mail no quedó escrito en el ingreso').toHaveValue(email)
     await page.getByRole('button', { name: 'Entrar' }).click()
   }
   // Si no entra, que diga por qué (clave, permisos o confirmación) en vez de "no encontré el Tablero"
   const tablero = page.getByRole('heading', { name: 'Tablero' })
   const alerta = page.getByRole('alert')
   const sinAcceso = page.getByRole('heading', { name: 'Sin acceso' })
-  await expect(tablero.or(alerta).or(sinAcceso).first()).toBeVisible({ timeout: 20_000 })
+  try {
+    await expect(tablero.or(alerta).or(sinAcceso).first()).toBeVisible({ timeout: 20_000 })
+  } catch {
+    throw new Error(`Después de tocar "Entrar" no pasó nada en 20 segundos (sigue en: "${(await page.locator('h1').first().innerText().catch(() => '?')).trim()}"). Mirá la captura en el informe.`)
+  }
   if (await sinAcceso.isVisible())
     throw new Error(`El usuario de prueba (${process.env.PRUEBA_EMAIL}) entra pero no tiene permisos en el sistema: falta correr 2026-10-15-datos-de-prueba.sql con su mail (ver LEEME.md)`)
   if (await alerta.isVisible())
