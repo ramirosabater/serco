@@ -255,7 +255,7 @@ export default function Ayuda() {
       if (nuevo !== el) { el = nuevo; if (el && primera) { el.scrollIntoView({ block: 'center', behavior: sinAnimacion() ? 'auto' : 'smooth' }); primera = false } }
       const r = el?.getBoundingClientRect()
       setRect(r && r.width + r.height > 0 ? r : null)
-      if (r) setBuscando(false)
+      if (r && r.width + r.height > 0) { setBuscando(false); setNoEsta(false) }   // si apareció tarde (pantalla lenta), deja de decir "no lo encuentro"
     }
     ;(async () => {
       if (p.ir) {

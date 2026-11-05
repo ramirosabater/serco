@@ -27,6 +27,12 @@ async function servidorDePrueba(page: Page) {
 
 test('subir un escaneo en una ficha y verlo', async ({ page, context }) => {
   const pedidos = await servidorDePrueba(page)
+  // para entender una falla: qué pasó con el grabado de la ficha y qué errores mostró la consola
+  const ficha: string[] = [], errores: string[] = []
+  page.on('console', (m) => { if (m.type() === 'error') errores.push(m.text().slice(0, 200)) })
+  page.on('pageerror', (e) => errores.push(e.message.slice(0, 200)))
+  page.on('requestfinished', async (r) => { if (r.url().includes('/rest/v1/transportistas') && r.method() !== 'GET') ficha.push(`${r.method()} ${(await r.response())?.status()}`) })
+  page.on('requestfailed', (r) => { if (r.url().includes('/rest/v1/') || r.url().includes('/functions/')) ficha.push(`FALLÓ ${r.method()} ${r.url().split('/v1/')[1]?.slice(0, 60)} ${r.failure()?.errorText}`) })
   await page.goto('/altas/transportistas')
   await page.getByPlaceholder(/Buscar/).fill(PRUEBA)
   await page.getByRole('cell', { name: PRUEBA, exact: true }).first().click()
@@ -35,7 +41,10 @@ test('subir un escaneo en una ficha y verlo', async ({ page, context }) => {
   await expect.poll(() => pedidos.find((p) => p.tipo === 'subir')?.ruta ?? '').toMatch(/^habilitaciones\/transportistas\/[A-Za-z0-9 ._-]+\/hab_pro_archivo-/)
   // o aparece "Ver", o la pantalla mostró un error: en ese caso la prueba falla diciendo cuál
   const aviso = page.locator('[role=alert]')
-  await expect(fila.getByRole('button', { name: 'Ver' }).or(aviso).first()).toBeVisible({ timeout: 20_000 })
+  const aparecio = await fila.getByRole('button', { name: 'Ver' }).or(aviso).first().waitFor({ timeout: 20_000 }).then(() => true, () => false)
+  if (!aparecio) throw new Error('Después de subir no apareció ni "Ver" ni un error.\n' +
+    `Fila: ${(await fila.innerText()).replace(/\s+/g, ' ')}\n` +
+    `Pedidos a la ficha: ${JSON.stringify(ficha)}\nErrores de la página: ${JSON.stringify(errores)}`)
   if (await aviso.isVisible()) throw new Error('La pantalla mostró un error al subir: ' + (await aviso.innerText()))
   await page.waitForTimeout(1000)   // que termine de acomodarse la fila antes de tocar "Ver"
   await expect(fila.getByRole('button', { name: 'Ver' }), 'el botón Ver desapareció después de subir').toBeVisible()

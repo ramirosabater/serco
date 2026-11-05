@@ -44,7 +44,9 @@ test('cada circuito encuentra lo que explica', async ({ page }) => {
       if (p.foco) {
         // o lo resalta, o dice por qué no está (solo vale si el circuito lo previó)
         await expect(page.locator('.bt-foco').or(page.locator('.bt-texto', { hasText: /No lo encuentro|No encuentro|Ahora no|Todavía no|Esta parte/ }))).toBeVisible({ timeout: 8000 })
-        if (!(await page.locator('.bt-foco').isVisible()) && !p.falta) sinEncontrar.push(`${c.titulo} · paso ${i + 1} (${p.foco})`)
+        // en el sitio publicado la pantalla puede tardar: se le da unos segundos más para aparecer
+        const encontro = await page.locator('.bt-foco').waitFor({ timeout: 6000 }).then(() => true, () => false)
+        if (!encontro && !p.falta) sinEncontrar.push(`${c.titulo} · paso ${i + 1} (${p.foco})`)
       }
       await page.locator('.bt-globo').getByRole('button', { name: i + 1 < c.pasos.length ? 'Siguiente' : '¡Listo!' }).click()
     }
