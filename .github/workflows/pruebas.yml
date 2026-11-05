@@ -42,7 +42,8 @@ jobs:
             echo "Este push no cambia la web: se prueba lo publicado."; exit 0
           fi
           for i in $(seq 1 80); do
-            PUB=$(curl -fsS "$BASE_URL/version.json?t=$(date +%s)" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
+            # (mientras Netlify no publica, version.json puede no existir todavía: no es un error)
+            PUB=$(curl -fsS "$BASE_URL/version.json?t=$(date +%s)" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' || true)
             if [ "$PUB" = "$GITHUB_SHA" ]; then echo "Netlify ya publicó $GITHUB_SHA"; exit 0; fi
             echo "Esperando a Netlify (publicado: ${PUB:-?})…"; sleep 15
           done
@@ -51,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: pruebas/package-lock.json
 
