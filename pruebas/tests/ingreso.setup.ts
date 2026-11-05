@@ -18,8 +18,10 @@ setup('entrar al sistema', async ({ page }) => {
       + 'o sacá la protección en Netlify → Site configuration → Access & security. Ver LEEME.md.')
   }
   const mail = page.locator('input[type=email]')
-  // En una copia local con sesión de desarrollo no aparece el ingreso
-  if (await mail.isVisible({ timeout: 8_000 }).catch(() => false)) {
+  // Esperar a que termine de cargar: aparece el ingreso o, en una copia local con sesión de desarrollo, el Tablero
+  // (isVisible no espera: mirarlo una sola vez mientras dice "Cargando…" hacía saltear el ingreso)
+  await expect(mail.or(page.getByRole('heading', { name: 'Tablero' })).first()).toBeVisible({ timeout: 30_000 })
+  if (await mail.isVisible()) {
     const email = process.env.PRUEBA_EMAIL?.trim(), clave = process.env.PRUEBA_CLAVE?.trim()
     if (!email || !clave) throw new Error('Falta PRUEBA_EMAIL o PRUEBA_CLAVE en pruebas/.env (ver LEEME.md)')
     const pass = page.locator('input[type=password]')
