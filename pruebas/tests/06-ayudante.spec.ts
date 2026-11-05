@@ -27,8 +27,14 @@ test('cada circuito encuentra lo que explica', async ({ page }) => {
   const circuitos: { titulo: string; pasos: { foco?: string; falta?: string }[] }[] =
     await page.evaluate(() => (window as unknown as { AyudaApp: { circuitos: { titulo: string; roles: string[]; pasos: { foco?: string; falta?: string }[] }[] } })
       .AyudaApp.circuitos.filter((c) => !c.roles.every((r) => r === 'cliente')).map((c) => ({ titulo: c.titulo, pasos: c.pasos.map((p) => ({ foco: p.foco, falta: p.falta })) })))
+  // solo los circuitos que ve este usuario (los de administrador no aparecen si el usuario de pruebas no lo es)
+  await page.getByRole('button', { name: 'Ayuda' }).click()
+  await expect(page.locator('.bt-circuito').first()).toBeVisible()
+  const visibles = await page.locator('.bt-circuito').allInnerTexts()
+  const mios = circuitos.filter((c) => visibles.some((t) => t.includes(c.titulo)))
+  expect(mios.length, 'circuitos visibles para el usuario de pruebas').toBeGreaterThan(0)
   const sinEncontrar: string[] = []
-  for (const c of circuitos) {
+  for (const c of mios) {
     await page.goto('/')
     await abrirCircuito(page, c.titulo)
     await page.getByRole('button', { name: '⏸ Pausa' }).click()     // a mano, sin esperar

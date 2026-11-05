@@ -33,7 +33,12 @@ test('subir un escaneo en una ficha y verlo', async ({ page, context }) => {
   const fila = page.locator('tr', { hasText: 'Habilitación provincial' }).first()
   await fila.locator('input[type=file]').setInputFiles(PDF)
   await expect.poll(() => pedidos.find((p) => p.tipo === 'subir')?.ruta ?? '').toMatch(/^habilitaciones\/transportistas\/[A-Za-z0-9 ._-]+\/hab_pro_archivo-/)
-  await expect(fila.getByRole('button', { name: 'Ver' })).toBeVisible()
+  // o aparece "Ver", o la pantalla mostró un error: en ese caso la prueba falla diciendo cuál
+  const aviso = page.locator('[role=alert]')
+  await expect(fila.getByRole('button', { name: 'Ver' }).or(aviso).first()).toBeVisible({ timeout: 20_000 })
+  if (await aviso.isVisible()) throw new Error('La pantalla mostró un error al subir: ' + (await aviso.innerText()))
+  await page.waitForTimeout(1000)   // que termine de acomodarse la fila antes de tocar "Ver"
+  await expect(fila.getByRole('button', { name: 'Ver' }), 'el botón Ver desapareció después de subir').toBeVisible()
   const pestana = context.waitForEvent('page')
   await fila.getByRole('button', { name: 'Ver' }).click()
   const nueva = await pestana
