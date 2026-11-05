@@ -5,7 +5,7 @@ import { entidad, estadoVto, ETIQUETA_ESTADO, type Campo, type Documento, type E
 import { cuitValido, soloDigitos } from '../../lib/cuit'
 import { fd } from '../../lib/formato'
 import { leerCertificado, NOMBRE_TIPO } from '../../lib/leerCertificado'
-import { abrirArchivo, subirArchivo } from '../../lib/archivos'
+import { abrirArchivo, enSistema, subirArchivo } from '../../lib/archivos'
 import { useAuth } from '../../auth/AuthProvider'
 import { MenuAltas } from './AltasLista'
 import CorrientesHabilitadas from '../../components/CorrientesHabilitadas'
@@ -139,7 +139,7 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
       <td><span className={`pill ${ETIQUETA_ESTADO[est][1]}`}>{est === 'vigente' || est === 'por_vencer' ? `Vence ${fd(vto)}` : ETIQUETA_ESTADO[est][0]}</span></td>
       <td className="nw small">
         {d.archivo && <>
-          {archivo && <button type="button" className="link" onClick={ver}>Ver</button>}
+          {enSistema(archivo) ? <button type="button" className="link" onClick={ver}>Ver</button> : archivo ? <span className="muted small">Escaneo sin subir</span> : null}
           {!soloLectura && <label style={{ marginLeft: archivo ? 10 : 0, cursor: 'pointer' }} className="small">
             <input type="file" accept=".pdf,image/*" hidden onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} disabled={subiendo} />
             <span className="link" style={{ color: 'var(--acc)', textDecoration: 'underline', fontWeight: 600 }}>{subiendo ? 'Subiendo…' : archivo ? 'Reemplazar' : 'Subir escaneo'}</span>

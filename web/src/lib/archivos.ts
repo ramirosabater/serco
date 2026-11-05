@@ -4,6 +4,9 @@ import { invocar } from './supabase'
 // van al Google Drive de Serco (o al Storage de Supabase si Drive todavía no está configurado).
 // En la base queda "drive:<id>" o la ruta; el navegador nunca toca las claves de Google.
 
+/** El archivo ya está en el sistema (Drive o Storage). Si quedó la ruta del Access, el escaneo no se encontró al migrar. */
+export const enSistema = (ruta: string | null | undefined): ruta is string => !!ruta && !ruta.startsWith('\\') && !/^[A-Z]:\\/i.test(ruta)
+
 /** Sube un archivo. `ruta` es dónde va (por ejemplo "habilitaciones/choferes/39/sep_archivo-2026-11-30.pdf").
  *  Devuelve lo que hay que anotar en la base, o el error. */
 export async function subirArchivo(ruta: string, archivo: File): Promise<{ guardado: string | null; error: string | null }> {

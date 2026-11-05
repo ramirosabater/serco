@@ -4,7 +4,7 @@ import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, num, umL } from '../lib/formato'
 import type { UM } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
-import { abrirArchivo } from '../lib/archivos'
+import { abrirArchivo, enSistema } from '../lib/archivos'
 
 // Ficha de un Manifiesto Nación: qué residuos viajaron, el certificado del operador
 // y si ya se les avisó a los generadores.
@@ -130,7 +130,7 @@ export default function NacionDetalle() {
               <dt>Chofer</dt><dd>{n.choferes?.nombre ?? '—'}</dd>
             </dl>
             <div className="bar mt" style={{ marginBottom: 0 }}>
-              {n.escaneo && <button onClick={() => abrirArchivo(n.escaneo, setError)}>Ver formulario firmado</button>}
+              {enSistema(n.escaneo) && <button onClick={() => abrirArchivo(n.escaneo, setError)}>Ver formulario firmado</button>}
               <Link to={`/nacion/${n.id}/imprimir`} data-ayuda="nac-imprimir"><button>Imprimir en el formulario azul</button></Link>
               <Link to={`/nacion/${n.id}/anexo`} data-ayuda="nac-anexo"><button>Imprimir anexo (detalle por cliente)</button></Link>
             </div>
@@ -149,7 +149,7 @@ export default function NacionDetalle() {
                   {c.tipo_tratamiento && <><dt>Tratamiento</dt><dd>{c.tipo_tratamiento}</dd></>}
                 </dl>
                 <div className="bar mt" style={{ marginBottom: 0 }}>
-                  {c.archivo && <button onClick={() => abrirArchivo(c.archivo, setError)}>Ver PDF del certificado</button>}
+                  {enSistema(c.archivo) && <button onClick={() => abrirArchivo(c.archivo, setError)}>Ver PDF del certificado</button>}
                   {perfil?.rol !== 'cliente' && <Link to={`/certificados-serco?cert=${c.id}`}><button>Certificados de Serco para los generadores</button></Link>}
                 </div>
               </div>))}

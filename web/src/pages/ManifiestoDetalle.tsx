@@ -5,7 +5,7 @@ import { etapaDe, etapaManifiesto, ETAPAS, fd, fnum, hoy, num, umL } from '../li
 import type { Item, Manifiesto, UM } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
 import { colorEtapa, PillEtapa } from '../components/Etapa'
-import { abrirArchivo } from '../lib/archivos'
+import { abrirArchivo, enSistema } from '../lib/archivos'
 import { traerTodo } from '../lib/paginar'
 
 const SELECT = `*, generadores(id, nombre, cuit), generadores_principales(nombre), transportistas(id, nombre),
@@ -89,7 +89,8 @@ export default function ManifiestoDetalle() {
               <span className="punto" />
               <div className="t">{t}</div>
               <div className="m">{k <= etapa || k === 1 || k === 2 ? detalle[k] : 'Pendiente'}</div>
-              {k <= etapa && doc && <button className="doc-link" onClick={() => abrirArchivo(doc, setError)}>Ver documento</button>}
+              {k <= etapa && (enSistema(doc) ? <button className="doc-link" onClick={() => abrirArchivo(doc, setError)}>Ver documento</button>
+                : doc ? <div className="muted small" title="El Access lo tenía anotado, pero el archivo no estaba en las carpetas que se migraron">Escaneo sin subir</div> : null)}
             </div>)
         })}
         </div></div>}
@@ -114,8 +115,8 @@ export default function ManifiestoDetalle() {
                   {editable && !corrigiendo && !i.certificados && salvando !== i.id && <div><button className="link small" onClick={() => setSalvando(i.id)} title="Corregir la cantidad (queda salvada con *)">Salvar *</button></div>}</td>
                 <td><PillEtapa etapa={i.estado === 'disposicion_final' && i.certificados?.enviado_cliente ? 4 : etapaDe(i.estado)} /></td>
                 <td className="nw">{i.manifiestos_nacion ? (perfil?.rol === 'cliente' ? fnum(i.manifiestos_nacion.numero) : <Link to={`/nacion/${i.manifiestos_nacion.id}`}>{fnum(i.manifiestos_nacion.numero)}</Link>) : '—'}</td>
-                <td className="nw">{i.certificados
-                  ? <button className="link" onClick={() => abrirArchivo(i.certificados!.archivo, setError)}>{i.certificados.numero}</button> : '—'}</td>
+                <td className="nw">{enSistema(i.certificados?.archivo)
+                  ? <button className="link" onClick={() => abrirArchivo(i.certificados!.archivo, setError)}>{i.certificados!.numero}</button> : i.certificados ? i.certificados.numero : '—'}</td>
               </tr>))}
             </tbody>
           </table></div>
@@ -139,7 +140,7 @@ export default function ManifiestoDetalle() {
           <div className="bar mt">
             {puedeEditar && m.tipo === 'azul' && !m.anulado && <Link to={`/manifiestos/${m.id}/imprimir`} data-ayuda="det-imprimir"><button>Imprimir en el formulario</button></Link>}
             {puedeEditar && !m.anulado && <Link to={`/manifiestos/${m.id}/etiquetas`} data-ayuda="det-etiquetas"><button>Etiquetas</button></Link>}
-            {m.escaneo && <button onClick={() => abrirArchivo(m.escaneo, setError)}>Ver escaneo firmado</button>}
+            {enSistema(m.escaneo) && <button onClick={() => abrirArchivo(m.escaneo, setError)}>Ver escaneo firmado</button>}
             {editable && !corrigiendoDatos && <button onClick={() => setCorrigiendoDatos(true)} data-ayuda="det-corregir">Corregir generador o dirección</button>}
             {anulable && !anulando && <button className="peligro" onClick={() => setAnulando(true)}>Anular manifiesto</button>}
           </div>
@@ -361,7 +362,8 @@ function Documentos({ m, abrir, cliente }: { m: Manifiesto; abrir: (ruta: string
         <div key={k} className={`doc ${f.hecho ? '' : 'off'}`} style={colorEtapa(f.etapa)}>
           <span className="punto" />
           <div><b>{f.titulo}</b><div className="muted small">{ETAPAS[f.etapa]} · {f.detalle}</div></div>
-          {f.ruta ? <button onClick={() => abrir(f.ruta!)}>Ver</button>
+          {enSistema(f.ruta) ? <button onClick={() => abrir(f.ruta!)}>Ver</button>
+            : f.ruta ? <span className="muted small" title="El Access lo tenía anotado, pero el archivo no estaba en las carpetas que se migraron">Escaneo sin subir</span>
             : f.hecho && f.etapa < 4 && !(cliente && f.etapa === 2) ? <span className="muted small">Sin escaneo</span> : null}
         </div>))}
       </div>
