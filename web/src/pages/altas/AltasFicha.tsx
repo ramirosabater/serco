@@ -186,6 +186,9 @@ export default function AltasFicha() {
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
   const [guardando, setGuardando] = useState(false)
+  // Qué ficha terminó de llegar de la base: hasta entonces no se muestra nada para editar ni subir
+  // (si no, un escaneo subido mientras carga queda tapado por los datos que llegan después)
+  const [cargada, setCargada] = useState<string | null>(null)
   const soloLectura = !puedeEditar
 
   useEffect(() => {
@@ -193,7 +196,7 @@ export default function AltasFicha() {
     if (esNuevo) { const ini: Valores = { [e.activo]: true }; setOriginal(ini); setValores(ini); return }
     supabase.from(e.tabla).select('*').eq('id', id!).maybeSingle().then(({ data, error }) => {
       if (error || !data) setError(error ? mensajeError(error) : `No existe este ${e.singular}.`)
-      else { setOriginal(data); setValores(data) }
+      else { setOriginal(data); setValores(data); setCargada(`${e.tabla}/${id}`) }
     })
   }, [e, id, esNuevo])
 
@@ -255,6 +258,14 @@ export default function AltasFicha() {
 
   const nombre = String(original[e.nombre] ?? '')
   const activo = valores[e.activo] !== false
+
+  if (!esNuevo && cargada !== `${e.tabla}/${id}`) return (
+    <>
+      <MenuAltas />
+      <p><Link to={`/altas/${e.clave}`}>Volver a {e.titulo.toLowerCase()}</Link></p>
+      {error ? <div className="aviso bad" role="alert">{error}</div> : <p className="muted">Cargando…</p>}
+    </>
+  )
 
   return (
     <>
