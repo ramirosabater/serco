@@ -26,6 +26,15 @@ setup('entrar al sistema', async ({ page }) => {
     await page.locator('input[type=password]').fill(clave)
     await page.getByRole('button', { name: 'Entrar' }).click()
   }
-  await expect(page.getByRole('heading', { name: 'Tablero' })).toBeVisible()
+  // Si no entra, que diga por qué (clave, permisos o confirmación) en vez de "no encontré el Tablero"
+  const tablero = page.getByRole('heading', { name: 'Tablero' })
+  const alerta = page.getByRole('alert')
+  const sinAcceso = page.getByRole('heading', { name: 'Sin acceso' })
+  await expect(tablero.or(alerta).or(sinAcceso).first()).toBeVisible({ timeout: 20_000 })
+  if (await sinAcceso.isVisible())
+    throw new Error(`El usuario de prueba (${process.env.PRUEBA_EMAIL}) entra pero no tiene permisos en el sistema: falta correr 2026-10-15-datos-de-prueba.sql con su mail (ver LEEME.md)`)
+  if (await alerta.isVisible())
+    throw new Error(`No pudo entrar con el usuario de prueba (${process.env.PRUEBA_EMAIL}): "${(await alerta.innerText()).trim()}". Revisá PRUEBA_EMAIL y PRUEBA_CLAVE (en GitHub: Settings → Secrets; en la PC: pruebas/.env) y que el usuario esté confirmado en Supabase.`)
+  await expect(tablero).toBeVisible()
   await page.context().storageState({ path: '.sesion/usuario.json' })
 })
