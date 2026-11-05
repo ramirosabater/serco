@@ -228,35 +228,93 @@ def main():
         mime = mimetypes.guess_type(str(local))[0] or 'application/octet-stream'
         return 'drive:' + d.subir(nombre, padre, str(local), mime)
 
-    errores, hechos, t0 = [], 0, __import__('time').time()
-    bytes_hechos = 0
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        fut = {ex.submit(subir, destino, local): destino for destino, local in pendientes.items()}
-        for n, f in enumerate(as_completed(fut), 1):
-            destino = fut[f]
+    import time
+    from concurrent.futures import FIRST_COMPLETED, wait
+    errores, hechos, t0 = [], 0, time.time()
+    bytes_hechos, sin_red, motivo = 0, 0, None
+    cola = list(pendientes.items())
+    total_n = len(cola)
+
+    def anotar(destino, guardado):
+        nonlocal db, cur
+        # Se anota y se guarda apenas sube: si se corta, lo subido no se vuelve a subir.
+        # Si la conexión con la base se cayó, se reconecta y se reintenta.
+        for intento in range(3):
+            try:
+                for tabla, col, i, ruta, local, _, _ in por_destino[destino]:
+                    cur.execute(f'update {tabla} set {col} = %s where id = %s', (guardado, i))
+                    if ruta: cur.execute('update migracion_archivos set storage_path = %s, subido = coalesce(subido, now()) where ruta_access = %s', (guardado, ruta))
+                db.commit(); return
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                if intento == 2: raise
+                print('  (se cortó la conexión con la base: reconectando…)', flush=True)
+                try: db.close()
+                except Exception: pass
+                time.sleep(5)
+                db = conectar(); cur = db.cursor(); carpetas.db = db
+
+    print('Subiendo. Para pausar: Ctrl+C (termina los que están en curso, los anota y sale; después se retoma con el mismo comando).', flush=True)
+    ex = ThreadPoolExecutor(max_workers=4)
+    en_curso = {}
+    try:
+        while cola or en_curso:
+            while cola and len(en_curso) < 6 and not motivo:          # pocos en vuelo: pausar es inmediato
+                destino, local = cola.pop(0)
+                en_curso[ex.submit(subir, destino, local)] = destino
+            if not en_curso: break
+            listos, _ = wait(list(en_curso), timeout=1, return_when=FIRST_COMPLETED)   # con timeout: Ctrl+C responde
+            for f in listos:
+                destino = en_curso.pop(f)
+                try:
+                    guardado = f.result()
+                except Exception as e:
+                    errores.append((destino, str(e)))
+                    sin_red = sin_red + 1 if 'Sin conexión' in str(e) else 0
+                    if sin_red >= 6 and not motivo:
+                        motivo = 'sin internet'
+                        print('\n  No hay conexión con Google: se pausa. Terminando los que están en curso…', flush=True)
+                    continue
+                sin_red = 0
+                try:
+                    anotar(destino, guardado)
+                except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                    errores.append((destino, 'no se pudo anotar en la base'))
+                    if not motivo:
+                        motivo = 'sin conexión con la base'
+                        print('\n  No hay conexión con la base: se pausa. Terminando los que están en curso…', flush=True)
+                    continue
+                except psycopg2.Error as e:
+                    # un registro que la base no acepta (p. ej. una regla que no cumple un dato viejo): se anota y se sigue
+                    try: db.rollback()
+                    except Exception: pass
+                    errores.append((destino, 'la base no lo aceptó: ' + str(e).splitlines()[0]))
+                    print(f'  ({destino}: la base no lo aceptó, sigue con el resto)', flush=True)
+                    continue
+                hechos += 1; bytes_hechos += pendientes[destino].stat().st_size
+                n = hechos + len(errores)
+                if hechos % 25 == 0:
+                    seg = time.time() - t0
+                    falta = (total_bytes - bytes_hechos) / (bytes_hechos / seg) if bytes_hechos else 0
+                    print(f'  {time.strftime("%H:%M")}  {n}/{total_n} · {bytes_hechos / 1e9:.2f} de {total_bytes / 1e9:.2f} GB · faltan unos {falta / 60:.0f} min', flush=True)
+            if motivo: cola.clear()
+    except KeyboardInterrupt:
+        motivo = 'pausa'
+        print('\n  Pausa: terminando y anotando los que están en curso (unos segundos)…', flush=True)
+        for f in list(en_curso):
+            destino = en_curso.pop(f)
             try:
                 guardado = f.result()
-            except Exception as e:
-                errores.append((destino, str(e))); continue
-            # Se anota y se guarda apenas sube: si se corta, lo subido no se vuelve a subir.
-            # Si la conexión con la base se cayó (pasa en corridas largas), se reconecta y se reintenta.
-            for intento in range(3):
-                try:
-                    for tabla, col, i, ruta, local, _, _ in por_destino[destino]:
-                        cur.execute(f'update {tabla} set {col} = %s where id = %s', (guardado, i))
-                        if ruta: cur.execute('update migracion_archivos set storage_path = %s, subido = coalesce(subido, now()) where ruta_access = %s', (guardado, ruta))
-                    db.commit(); break
-                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-                    if intento == 2: raise SystemExit(f'Se perdió la conexión con la base ({e}). Volvé a correr el mismo comando: sigue donde quedó.')
-                    print('  (se cortó la conexión con la base: reconectando…)')
-                    try: db.close()
-                    except Exception: pass
-                    db = conectar(); cur = db.cursor(); carpetas.db = db
-            hechos += 1; bytes_hechos += pendientes[destino].stat().st_size
-            if n % 25 == 0 or n == len(fut):
-                seg = __import__('time').time() - t0
-                falta = (total_bytes - bytes_hechos) / (bytes_hechos / seg) if bytes_hechos else 0
-                print(f'  {__import__("time").strftime("%H:%M")}  {n}/{len(fut)} · {bytes_hechos / 1e9:.2f} de {total_bytes / 1e9:.2f} GB · faltan unos {falta / 60:.0f} min', flush=True)
+                anotar(destino, guardado); hechos += 1
+            except Exception:
+                try: db.rollback()
+                except Exception: pass   # lo que no llegó a anotarse se encuentra en el Drive en la próxima corrida (no se sube de nuevo)
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+    if motivo:
+        print(f'\nPausado ({motivo}). Anotados en esta corrida: {hechos}. Faltan {total_n - hechos}.')
+        print('Para seguir, corré el mismo comando cuando tengas conexión: sigue desde donde quedó y no sube nada dos veces.')
+        if errores: Path('archivos_con_error.txt').write_text('\n'.join(f'{d}: {e}' for d, e in errores), encoding='utf-8')
+        return
     print(f'Subidos: {hechos} · errores: {len(errores)}')
     if errores:
         Path('archivos_con_error.txt').write_text('\n'.join(f'{d}: {e}' for d, e in errores), encoding='utf-8')

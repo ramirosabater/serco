@@ -10,8 +10,11 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,                       // de a una: comparten el usuario y los datos de prueba
-  retries: 0,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'informe' }]],
+  // En GitHub (CI) se reintenta una vez lo que falla por un corte de red; en la PC no
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI
+    ? [['github'], ['list'], ['html', { open: 'never', outputFolder: 'informe' }]]
+    : [['list'], ['html', { open: 'never', outputFolder: 'informe' }]],
   use: {
     baseURL: BASE_URL,
     locale: 'es-AR',

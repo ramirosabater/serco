@@ -1,0 +1,76 @@
+# Pruebas automáticas de Gestión Serco (Playwright) en cada push.
+# Espera a que Netlify publique esa versión y recorre el sistema publicado con el usuario de prueba.
+# Si algo falla, GitHub manda un mail y deja el informe con capturas en la corrida (Actions → la corrida → "informe").
+# Necesita los secrets PRUEBA_EMAIL y PRUEBA_CLAVE (ver pruebas/LEEME.md).
+name: Pruebas automáticas
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:        # también se puede correr a mano desde la pestaña Actions
+
+concurrency:
+  group: pruebas
+  cancel-in-progress: true  # si se hacen dos push seguidos, se prueba el último
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      BASE_URL: https://sercosa.netlify.app
+      PRUEBA_EMAIL: ${{ secrets.PRUEBA_EMAIL }}
+      PRUEBA_CLAVE: ${{ secrets.PRUEBA_CLAVE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Controlar que estén cargados el usuario y la clave de prueba
+        run: |
+          if [ -z "$PRUEBA_EMAIL" ] || [ -z "$PRUEBA_CLAVE" ]; then
+            echo "::error::Faltan los secrets PRUEBA_EMAIL y PRUEBA_CLAVE (GitHub → Settings → Secrets and variables → Actions). Ver pruebas/LEEME.md"
+            exit 1
+          fi
+
+      - name: Esperar a que Netlify publique esta versión
+        run: |
+          # Si el push no cambió nada de la web, Netlify no vuelve a publicar: se prueba lo que está
+          ANTES="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$ANTES" ] && [ "$ANTES" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$ANTES" 2>/dev/null && git diff --quiet "$ANTES" "$GITHUB_SHA" -- web; then
+            echo "Este push no cambia la web: se prueba lo publicado."; exit 0
+          fi
+          for i in $(seq 1 80); do
+            PUB=$(curl -fsS "$BASE_URL/version.json?t=$(date +%s)" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
+            if [ "$PUB" = "$GITHUB_SHA" ]; then echo "Netlify ya publicó $GITHUB_SHA"; exit 0; fi
+            echo "Esperando a Netlify (publicado: ${PUB:-?})…"; sleep 15
+          done
+          echo "::error::Netlify no publicó esta versión en 20 minutos. Revisá el deploy en Netlify."
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: pruebas/package-lock.json
+
+      - name: Instalar
+        working-directory: pruebas
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Correr las pruebas
+        working-directory: pruebas
+        run: npx playwright test
+
+      - name: Guardar el informe (capturas y paso a paso)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe
+          path: |
+            pruebas/informe/
+            pruebas/test-results/
+          retention-days: 14

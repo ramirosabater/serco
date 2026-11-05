@@ -1,9 +1,20 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// version.json: qué commit está publicado (Netlify pone COMMIT_REF). Lo usan las pruebas automáticas de GitHub
+// para esperar a que Netlify termine de publicar antes de probar.
+const version = (): Plugin => ({
+  name: 'version',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json',
+      source: JSON.stringify({ commit: process.env.COMMIT_REF ?? 'local', publicado: new Date().toISOString() }) })
+  },
+})
 
 // En pruebas locales sin Supabase, /rest/v1 se redirige a un PostgREST propio (ver README)
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), version()],
   server: {
     proxy: process.env.POSTGREST_URL
       ? {
