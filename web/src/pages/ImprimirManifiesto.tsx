@@ -90,6 +90,33 @@ function F({ x, y, w, t, c }: { x: number; y: number; w: number; t?: ReactNode; 
   const dos = c === 'dos'   // texto largo: letra más chica, hasta dos renglones dentro de la misma celda
   return <div className={`fd ${c ?? ''}`} style={{ left: `${x}mm`, top: `${y - (dos ? 2.2 : 1.8)}mm`, width: `${w}mm` }}>{t}</div>
 }
+/** Descripción de la corriente para el formulario: en minúscula, con los códigos (Y9, Y48) en mayúscula */
+function descMinuscula(s: string | null | undefined): string {
+  return (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/\by\d+[a-z]?\b/g, (x) => x.toUpperCase())
+}
+
+/** Reparte los 7 renglones de la sección 3 entre los residuos: parejo, y lo que sobra a las descripciones más largas */
+function repartirRenglones(textos: string[], total = RENGLONES): number[] {
+  const n = Math.min(textos.length, total)
+  if (!n) return []
+  const base = Math.floor(total / n)
+  const out = textos.slice(0, n).map(() => base)
+  const orden = textos.slice(0, n).map((t, i) => [t.length, i] as const).sort((a, b) => b[0] - a[0] || a[1] - b[1])
+  for (let k = 0; k < total - base * n; k++) out[orden[k][1]]++
+  return out
+}
+
+/** La letra más grande con la que la descripción entra en su espacio (26 mm de ancho y los renglones que le tocan) */
+function letraDescripcion(texto: string, renglones: number): { size: number; alto: number; entra: boolean } {
+  const alto = renglones * 4.2 - 0.6
+  const tamanos = [2.5, 2.2, 1.95, 1.75, 1.55, 1.4]
+  for (const size of tamanos) {
+    const porLinea = Math.floor(26 / (size * 0.53))
+    if (cortar(texto, porLinea).length * size * 1.15 <= alto) return { size, alto, entra: true }
+  }
+  return { size: tamanos[tamanos.length - 1], alto, entra: false }
+}
+
 /** Ajusta la letra al largo del texto para que entre en la celda */
 const ajuste = (t: string | null | undefined, max: number) => (t && t.length > max ? 'dos' : 'xs') as 'dos' | 'xs'
 
@@ -150,8 +177,9 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
   const items: (Omit<Datos['manifiesto_items'][number], 'cantidad'> & { cantidad: number | null })[] = m.manifiesto_items.length ? m.manifiesto_items
     : prev.map((x, k) => ({ id: -k - 1, contenedor: null, cant_estimada: null, cantidad: null, um: x.um, corrientes: corrPrev[x.corriente_id] ?? null }))
   const cargados = m.manifiesto_items.length > 0
-  const lineas = items.map((i) => cortar(i.corrientes?.descripcion ?? '', 18))
-  const unaLinea = lineas.reduce((a, l) => a + l.length, 0) > RENGLONES
+  // Cada residuo ocupa una parte de los 7 renglones; su descripción, en minúscula, con la letra que entre
+  const descs = items.map((i) => descMinuscula(i.corrientes?.descripcion))
+  const reparto = repartirRenglones(descs)
   // Bloque 4: las del manifiesto; si no tiene (los del Access), las de Configuración → Parámetros
   const ins = m.instrucciones ?? instruccionesPorDefecto(p)
   const parte = que || (cargados ? 'todo' : 'sin3')
@@ -162,23 +190,28 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
   const colsMano = cargados && parte !== 'sin3'
 
   const filas: ReactNode[] = []
+  const abreviadas: string[] = []
   let r = 0
   items.forEach((i, k) => {
-    const desc = unaLinea ? [i.corrientes?.descripcion ?? ''] : lineas[k]
-    desc.forEach((ln, kk) => {
-      if (r >= RENGLONES) return
+    if (k >= reparto.length) return
+    {
       const y = 117.8 + r * 4.2
-      if (kk === 0 && colsMano) filas.push(
+      if (colsMano) filas.push(
         <F key={`t${k}`} x={18} y={y} w={15.5} t={i.contenedor ?? (i.um === 'LTS' ? 'Cisterna' : '')} c="sm" />,
         <F key={`e${k}`} x={36} y={y} w={25} t={i.cant_estimada != null ? num(i.cant_estimada) : ''} />,
         <F key={`q${k}`} x={64.5} y={y} w={19.5} t={i.cantidad != null ? num(i.cantidad) : ''} />)
-      if (kk === 0 && colsCorriente) filas.push(
+      if (colsCorriente) filas.push(
         <F key={`u${k}`} x={112.5} y={y} w={22} t={umL(i.um)} />,
         <F key={`f${k}`} x={136} y={y} w={26} t={i.corrientes?.estado_fisico ?? ''} c="sm" />,
         <F key={`c${k}`} x={163.5} y={y} w={29} t={i.corrientes?.codigo} />)
-      if (colsCorriente) filas.push(<F key={`d${k}-${kk}`} x={85.5} y={y} w={26} t={ln} c={unaLinea ? 'xs' : 'sm'} />)
-      r++
-    })
+      if (colsCorriente && descs[k]) {
+        const { size, alto, entra } = letraDescripcion(descs[k], reparto[k])
+        if (!entra) abreviadas.push(i.corrientes?.codigo ?? '')
+        const lh = size * 1.15, lineas = Math.max(1, Math.floor(alto / lh))   // si no entra todo, termina en "…" (sin media línea cortada)
+        filas.push(<div key={`d${k}`} className="fd desc" style={{ left: '85.5mm', top: `${y - 1.8}mm`, width: '26mm', maxHeight: `${lineas * lh}mm`, fontSize: `${size}mm`, lineHeight: `${lh}mm`, WebkitLineClamp: lineas }}>{descs[k]}</div>)
+      }
+      r += reparto[k]
+    }
   })
 
   const datos = (
@@ -232,6 +265,7 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
     con3 && !items.length && 'Todavía no se cargaron los residuos (sección 3): esa parte sale en blanco.',
     parte === 'sin3' && !hayPrev && !cargados && 'Al emitir no se eligió la corriente: la sección 3 sale en blanco.',
     con3 && items.length > RENGLONES && `El ${viaje ? 'viaje' : 'manifiesto'} tiene ${items.length} ${viaje ? 'corrientes' : 'residuos'} y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
+    abreviadas.length > 0 && `Con ${items.length} corrientes no entra toda la descripción de ${abreviadas.join(', ')}: sale abreviada (termina en "…").`,
     !g && viaje && 'El viaje no tiene planta de salida cargada: el renglón del generador sale en blanco.',
     !op && viaje && 'El viaje no tiene operador cargado.',
     g && !g?.cuit && (viaje ? 'La planta de salida no tiene CUIT cargado.' : 'El generador no tiene CUIT cargado.'),

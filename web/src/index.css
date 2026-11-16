@@ -172,6 +172,7 @@ td.nw { white-space: nowrap; }
 .hoja .fd.xs { font-size: 2.1mm; font-weight: 700; }
 .hoja .fd.x { font-size: 3.6mm; }
 .hoja .fd.dos { font-size: 1.75mm; line-height: 2.05mm; font-weight: 700; white-space: normal; max-height: 4.2mm; }
+.hoja .fd.desc { white-space: normal; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }   /* descripción de la sección 3: tamaño según el espacio */
 @page formulario { size: A4; margin: 0; }
 @page libro { size: A4 landscape; margin: 10mm 10mm 14mm; @bottom-right { content: "Hoja " counter(page) " de " counter(pages); font: 8pt Arial, sans-serif; } }
 /* Copia para la impresora: fuera de la app, en el flujo normal para que tome la hoja A4 sin márgenes */
@@ -186,6 +187,7 @@ td.nw { white-space: nowrap; }
   .hoja-print .fd.xs { font-size: 2.1mm; font-weight: 700; }
   .hoja-print .fd.x { font-size: 3.6mm; }
   .hoja-print .fd.dos { font-size: 1.75mm; line-height: 2.05mm; font-weight: 700; white-space: normal; max-height: 4.2mm; }
+  .hoja-print .fd.desc { white-space: normal; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
 }
 
 /* Reportes y libros */
