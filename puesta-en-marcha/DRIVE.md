@@ -27,6 +27,13 @@ Son unos 20 minutos, una sola vez. Todo con la cuenta de Gmail de Serco: **ambie
    - Tipo de aplicación: **App de escritorio** · nombre `migracion` → **Crear**.
    - Tocá **Descargar JSON** y guardalo en `C:\Apps\sgrp2\migracion` (se llama `client_secret_….json`; no va a GitHub).
 
+
+postgresql://postgres.cohvhjodbzuqbcynfrrc:Wcr54trQR38Ghh83@aws-1-ca-central-1.pooler.supabase.com:5432/postgres
+
+
+$env:SGRP_DB = "postgresql://postgres.cohvhjodbzuqbcynfrrc:Wcr54trQR38Ghh83@aws-1-ca-central-1.pooler.supabase.com:5432/postgres"
+python cargar_documentos_flota.py "C:\serco 26102026\documentos flota"
+
 ## 2. Autorizar · 3 min
 
 En PowerShell, en `C:\Apps\sgrp2\migracion`:

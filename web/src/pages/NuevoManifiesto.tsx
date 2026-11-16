@@ -6,6 +6,7 @@ import { fd, fnum, hoy } from '../lib/formato'
 import type { Instrucciones } from '../lib/tipos'
 import { INSTRUCTIVOS, instruccionesPorDefecto, NIVELES, PELIGROS } from '../lib/instrucciones'
 import { useAuth } from '../auth/AuthProvider'
+import { vigenteHasta } from '../lib/altas'
 
 interface Transp { id: number; nombre: string; emite_manifiestos: boolean }
 interface Gen { id: number; nombre: string; cuit: string | null; generador_principal_id: number | null; hab_mun_vto: string | null; actividad: string | null }
@@ -85,10 +86,10 @@ export default function NuevoManifiesto() {
     if (!transportista) return
     const t = Number(transportista)
     supabase.rpc('sugerir_numero', { p_transportista: t }).then(({ data }) => { setSugerido((data as string) ?? ''); setNumero((data as string) ?? '') })
-    supabase.from('choferes').select('id, nombre, activo, carnet_vto, carga_pel_vto, sep_vto').eq('transportista_id', t).order('activo', { ascending: false }).order('nombre')
-      .then(({ data }) => setChoferes((data ?? []).map((c) => ({ id: c.id, nombre: c.nombre, activo: c.activo, vtos: [c.carnet_vto, c.carga_pel_vto, c.sep_vto] }))))
-    supabase.from('camiones').select('id, patente, activo, vtv_vto, carga_pel_vto, ruta_vto').eq('transportista_id', t).order('activo', { ascending: false }).order('patente')
-      .then(({ data }) => setCamiones((data ?? []).map((c) => ({ id: c.id, nombre: c.patente, activo: c.activo, vtos: [c.vtv_vto, c.carga_pel_vto, c.ruta_vto] }))))
+    supabase.from('choferes').select('id, nombre, activo, carnet_vto, carga_pel_vto, carga_pel_tramite, sep_vto').eq('transportista_id', t).order('activo', { ascending: false }).order('nombre')
+      .then(({ data }) => setChoferes((data ?? []).map((c) => ({ id: c.id, nombre: c.nombre, activo: c.activo, vtos: [c.carnet_vto, vigenteHasta(c.carga_pel_vto, c.carga_pel_tramite), c.sep_vto] }))))
+    supabase.from('camiones').select('id, patente, activo, vtv_vto, carga_pel_vto').eq('transportista_id', t).order('activo', { ascending: false }).order('patente')
+      .then(({ data }) => setCamiones((data ?? []).map((c) => ({ id: c.id, nombre: c.patente, activo: c.activo, vtos: [c.vtv_vto, c.carga_pel_vto] }))))
     const pend = aplicar.current
     if (pend && pend.t === transportista) { setChofer(pend.chofer ?? ''); setCamion(pend.camion ?? ''); aplicar.current = null }
     else { setChofer(''); setCamion('') }
@@ -263,18 +264,17 @@ export default function NuevoManifiesto() {
 
       <div className="bar mt" style={{ justifyContent: 'flex-end' }}>
         <Link to="/manifiestos"><button type="button">Cancelar</button></Link>
-        {esAzul && <button disabled={enviando || bloqueado} onClick={() => setImprimir(false)}>Emitir</button>}
         <button className="pri" disabled={enviando || bloqueado} data-ayuda="nm-emitir" onClick={() => setImprimir(esAzul)}>{enviando ? 'Emitiendo…' : esAzul ? 'Emitir e imprimir' : 'Registrar manifiesto'}</button>
       </div>
     </form>
   )
 }
 
-/** Habilitación municipal del generador a la fecha del retiro */
+/** Habilitación de generador a la fecha del retiro */
 function HabGenerador({ vto, fecha }: { vto: string | null; fecha: string }) {
-  if (!vto) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación municipal sin cargar</span>
+  if (!vto) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación de generador sin cargar</span>
   const dias = Math.round((new Date(vto).getTime() - new Date(fecha).getTime()) / 86400000)
-  if (dias < 0) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vencida el {fd(vto)}</span>
-  if (dias <= 45) return <span className="pill haz" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vence el {fd(vto)}</span>
-  return <span className="pill ok" style={{ alignSelf: 'flex-start' }}>Habilitación municipal vigente hasta el {fd(vto)}</span>
+  if (dias < 0) return <span className="pill bad" style={{ alignSelf: 'flex-start' }}>Habilitación de generador vencida el {fd(vto)}</span>
+  if (dias <= 45) return <span className="pill haz" style={{ alignSelf: 'flex-start' }}>Habilitación de generador vence el {fd(vto)}</span>
+  return <span className="pill ok" style={{ alignSelf: 'flex-start' }}>Habilitación de generador vigente hasta el {fd(vto)}</span>
 }

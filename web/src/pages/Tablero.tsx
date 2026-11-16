@@ -296,7 +296,7 @@ function explicaciones(res: Resumen | null, alertas: Alerta[], anio: string, des
         boton: { texto: 'Ver vencimientos', ir: '/vencimientos' } }
     },
     regularizar: () => res.regularizar.length ? ({ titulo: 'Generadores a regularizar', foco: 'tab-regularizar',
-      texto: `Son generadores con retiros en el último año cuya habilitación municipal está vencida (${num(res.regularizar_total.vencido)}), por vencer (${num(res.regularizar_total.por_vencer)}) o sin cargar (${num(res.regularizar_total.sin_cargar)}). Si en Configuración está activado el bloqueo, no se les puede emitir hasta actualizarla.`,
+      texto: `Son generadores con retiros en el último año cuya habilitación de generador está vencida (${num(res.regularizar_total.vencido)}), por vencer (${num(res.regularizar_total.por_vencer)}) o sin cargar (${num(res.regularizar_total.sin_cargar)}). Si en Configuración está activado el bloqueo, no se les puede emitir hasta actualizarla.`,
       boton: { texto: 'Ver vencimientos de generadores', ir: '/vencimientos?tipo=generador' } }) : null,
   }
 }

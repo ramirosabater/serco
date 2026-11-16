@@ -13,6 +13,9 @@ test('emitir, cargar la sección 3, corregirla y anular', async ({ page }) => {
   await page.goto('/manifiestos/nuevo')
   await expect(page.getByRole('heading', { name: 'Nuevo manifiesto' })).toBeVisible()
   await espera
+  // con el formulario azul (SERCO) solo está "Emitir e imprimir": no se puede emitir sin imprimir
+  await expect(page.getByRole('button', { name: 'Emitir e imprimir' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Emitir', exact: true })).toHaveCount(0)
   const transportista = campo(page, 'Transportista')
   // se elige hasta que quede firme (la pantalla puede terminar de cargar después y volver a SERCO)
   await expect(async () => {
@@ -80,6 +83,10 @@ test('corregir: generador o dirección y salvar cantidad con * están disponible
   await page.getByRole('button', { name: 'Corregir generador o dirección' }).click()
   await expect(page.getByLabel('Motivo')).toBeVisible()
   await page.getByRole('button', { name: 'Cancelar' }).click()
-  await expect(page.getByRole('button', { name: 'Salvar *' }).first()).toBeVisible()
+  // salvar con * ya no pide motivo
+  await page.getByRole('button', { name: 'Salvar *' }).first().click()
+  await expect(page.getByLabel(/Cantidad correcta/)).toBeVisible()
+  await expect(page.getByLabel('Motivo', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cancelar' }).click()
   await expect(page.getByRole('button', { name: 'Anular manifiesto' })).toBeVisible()
 })

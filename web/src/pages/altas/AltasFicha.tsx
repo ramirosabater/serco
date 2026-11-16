@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase, mensajeError, invocar } from '../../lib/supabase'
-import { entidad, estadoVto, ETIQUETA_ESTADO, type Campo, type Documento, type Entidad } from '../../lib/altas'
+import { DIAS_TRAMITE, entidad, estadoVto, ETIQUETA_ESTADO, vigenteHasta, type Campo, type Documento, type Entidad } from '../../lib/altas'
 import { cuitValido, soloDigitos } from '../../lib/cuit'
 import { fd } from '../../lib/formato'
 import { leerCertificado, NOMBRE_TIPO } from '../../lib/leerCertificado'
@@ -72,7 +72,11 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
   const [subiendo, setSubiendo] = useState(false)
   const vto = valores[d.vto] as string | null
   const archivo = d.archivo ? (valores[d.archivo] as string | null) : null
-  const est = estadoVto(vto)
+  const enTramite = !!(d.tramite && valores[d.tramite])
+  const hasta = vigenteHasta(vto, enTramite)
+  const est = estadoVto(hasta)
+  // vencido pero todavía dentro de los días del trámite
+  const tramiteCorriendo = enTramite && !!vto && vto < new Date().toISOString().slice(0, 10) && est !== 'vencido'
 
   const [lectura, setLectura] = useState<{ ok: boolean; t: string } | null>(null)
   const [pidiendo, setPidiendo] = useState(false)
@@ -135,8 +139,12 @@ function FilaDocumento({ d, valores, set, tabla, id, soloLectura, onError, onGua
         </div>}
       </td>
       <td>{d.nro ? <input value={(valores[d.nro] as string) ?? ''} onChange={(e) => set(d.nro!, e.target.value || null)} disabled={soloLectura} aria-label={`Número de ${d.label}`} style={{ width: '100%', minWidth: 110 }} /> : <span className="muted">—</span>}</td>
-      <td><input type="date" value={vto ?? ''} onChange={(e) => set(d.vto, e.target.value || null)} disabled={soloLectura} aria-label={`Vencimiento de ${d.label}`} /></td>
-      <td><span className={`pill ${ETIQUETA_ESTADO[est][1]}`}>{est === 'vigente' || est === 'por_vencer' ? `Vence ${fd(vto)}` : ETIQUETA_ESTADO[est][0]}</span></td>
+      <td><input type="date" value={vto ?? ''} onChange={(e) => set(d.vto, e.target.value || null)} disabled={soloLectura} aria-label={`Vencimiento de ${d.label}`} />
+        {d.tramite && <label className="small nw" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }} title={`Renovación iniciada: sigue valiendo ${DIAS_TRAMITE} días después del vencimiento. Se apaga sola al cargar el vencimiento nuevo.`}>
+          <input type="checkbox" checked={enTramite} onChange={(e) => set(d.tramite!, e.target.checked)} disabled={soloLectura} />En trámite ({DIAS_TRAMITE} días más)</label>}</td>
+      <td><span className={`pill ${tramiteCorriendo ? 'haz' : ETIQUETA_ESTADO[est][1]}`}>
+        {tramiteCorriendo ? `En trámite hasta ${fd(hasta)}`
+          : est === 'vigente' || est === 'por_vencer' ? `Vence ${fd(hasta)}` : ETIQUETA_ESTADO[est][0]}</span></td>
       <td className="nw small">
         {d.archivo && <>
           {enSistema(archivo) ? <button type="button" className="link" onClick={ver}>Ver</button> : archivo ? <span className="muted small">Escaneo sin subir</span> : null}

@@ -86,7 +86,7 @@ export const CIRCUITOS: Circuito[] = [
       { foco: 'nm-flota', titulo: 'Camión y chofer', texto: 'Si el camión, el chofer o el generador tienen algo vencido, aparece en rojo y no te deja emitir. Se arregla en Vencimientos.' },
       { foco: 'nm-instrucciones', titulo: 'Instrucciones', texto: 'Las instrucciones vienen con los valores de siempre. Cambialas solo si este retiro es distinto.', falta: 'Esta parte aparece solo con el formulario azul de Serco.' },
       { foco: 'nm-residuos', titulo: 'Residuos: después', texto: 'Los residuos no se cargan ahora: se cargan cuando la carga entra a planta.' },
-      { foco: 'nm-emitir', titulo: 'Emitir', texto: 'Al emitir queda iniciado. Con "Emitir e imprimir" salen las secciones uno, dos, cuatro y cinco sobre el formulario azul.' },
+      { foco: 'nm-emitir', titulo: 'Emitir e imprimir', texto: 'Con "Emitir e imprimir" queda iniciado y se abre la impresión: salen las secciones uno, dos, cuatro y cinco sobre el formulario azul.' },
     ],
   },
   {

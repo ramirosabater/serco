@@ -158,16 +158,15 @@ export default function ManifiestoDetalle() {
   )
 }
 
-/** Salvar la cantidad de un residuo con * (como en el papel): queda el valor anterior y el motivo */
+/** Salvar la cantidad de un residuo con * (como en el papel): queda el valor anterior y la fecha */
 function SalvarCantidad({ item, onListo, onCancelar }: { item: Item & { corrientes?: { codigo: string } | null }; onListo: () => void; onCancelar: () => void }) {
   const [cantidad, setCantidad] = useState(String(item.cantidad).replace('.', ','))
-  const [motivo, setMotivo] = useState('')
   const [error, setError] = useState('')
   async function guardar(e: FormEvent) {
     e.preventDefault()
     const n = numero(cantidad)
     if (!n || n <= 0) { setError('Poné una cantidad mayor a cero'); return }
-    const { error } = await supabase.rpc('salvar_cantidad', { p_item: item.id, p_cantidad: n, p_motivo: motivo })
+    const { error } = await supabase.rpc('salvar_cantidad', { p_item: item.id, p_cantidad: n })
     if (error) setError(mensajeError(error)); else onListo()
   }
   return (
@@ -175,7 +174,6 @@ function SalvarCantidad({ item, onListo, onCancelar }: { item: Item & { corrient
       <b>Salvar la cantidad de {item.corrientes?.codigo} con *</b>
       <div className="bar">
         <label className="campo">Cantidad correcta ({umL(item.um)})<input value={cantidad} onChange={(e) => setCantidad(e.target.value)} inputMode="decimal" required autoFocus /></label>
-        <label className="campo" style={{ flex: 1 }}>Motivo<input value={motivo} onChange={(e) => setMotivo(e.target.value)} required placeholder="Ej.: pesada de balanza" /></label>
       </div>
       <p className="muted small" style={{ margin: 0 }}>Antes: {num(item.cantidad)} {umL(item.um)}. Queda marcado con * y en el historial. Después de que llega el certificado del operador ya no se salva: se anula.</p>
       {error && <div className="aviso bad">{error}</div>}

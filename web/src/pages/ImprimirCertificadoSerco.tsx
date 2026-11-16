@@ -7,7 +7,8 @@ import type { UM } from '../lib/tipos'
 // Certificado de disposición final de Serco para el generador (RPGyOSP numerado), original y duplicado.
 // Mismos datos y columnas que el del Access ("CERTIFICADOS DE DISPOSICION FINAL · RESIDUOS PELIGROSOS Nº").
 
-interface Residuo { corriente: string; estado_fisico: string | null; cantidad: number; um: UM; manifiesto: string; fecha: string; transportista: string | null; transportista_rpg: string | null }
+/** Un renglón por corriente: la cantidad sumada de todos los manifiestos de ese certificado */
+interface Residuo { corriente: string; estado_fisico: string | null; cantidad: number; um: UM; manifiestos: string[]; fecha_desde: string; fecha: string; transportista: string | null; transportista_rpg: string | null }
 interface Planta { nombre: string; cuit: string | null; direccion: string | null; ciudad: string | null; provincia: string | null; telefono: string | null; email: string | null
   hab_pro_nro: string | null; hab_pro_vto: string | null; hab_nac_nro: string | null; hab_nac_vto: string | null; hab_mun_nro: string | null; hab_mun_vto: string | null }
 interface Cert { numero: string; fecha: string; fecha_listado: string | null; tipo_tratamiento: string | null; operador: { nombre: string; ubicacion: string | null }; planta: Planta | null; residuos: Residuo[] }
@@ -74,7 +75,7 @@ function Hoja({ d, copia }: { d: Datos; copia: 'ORIGINAL' | 'DUPLICADO' }) {
             {(c.residuos ?? []).map((r, i) => (
               <tr key={i}>
                 <td>{r.corriente}</td><td>{r.estado_fisico ?? ''}</td><td className="n">{num(Number(r.cantidad))} {umL(r.um)}</td>
-                <td>{r.transportista ?? ''}{r.transportista_rpg ? ` · ${r.transportista_rpg}` : ''}</td><td>{fnum(r.manifiesto)}</td><td>{fd(r.fecha)}</td>
+                <td>{r.transportista ?? ''}{r.transportista_rpg ? ` · ${r.transportista_rpg}` : ''}</td><td>{(r.manifiestos ?? []).map(fnum).join(', ')}</td><td>{r.fecha_desde && r.fecha_desde !== r.fecha ? `${fd(r.fecha_desde)} al ${fd(r.fecha)}` : fd(r.fecha)}</td>
                 <td>{c.operador?.nombre}</td><td>{c.operador?.ubicacion ?? ''}</td><td>{c.tipo_tratamiento ?? ''}</td>
               </tr>))}
             {d.certificados.length > 1 && <tr className="cert-sub"><td colSpan={2}>Subtotal</td><td className="n">{totales(c.residuos ?? []).map(([u, v]) => `${num(v)} ${umL(u)}`).join(' + ')}</td><td colSpan={6} /></tr>}
@@ -116,7 +117,7 @@ export default function ImprimirCertificadoSerco() {
         </div>
         <p className="sub">{d.generador.nombre} · A4 vertical, a escala 100 %. Salen dos hojas: original y duplicado.</p>
         {sinPlanta && <div className="aviso haz" style={{ marginBottom: 12 }}>El certificado del operador no tiene la planta de Serco cargada: falta el bloque del operador por almacenamiento.</div>}
-        {!d.generador.hab_mun_nro && <div className="aviso haz" style={{ marginBottom: 12 }}>El generador no tiene número de RPGyOSP (habilitación municipal) cargado en su ficha.</div>}
+        {!d.generador.hab_mun_nro && <div className="aviso haz" style={{ marginBottom: 12 }}>El generador no tiene número de RPGyOSP (habilitación de generador) cargado en su ficha.</div>}
       </div>
       <div className="cert-hojas">
         <Hoja d={d} copia="ORIGINAL" />

@@ -17,6 +17,8 @@ export interface Documento {
   label: string; nro?: string; vto: string; archivo?: string
   /** Certificado que el sistema sabe leer al subirlo (saca DNI y vencimiento) */
   lector?: 'psicofisico' | 'mmpp'
+  /** Columna que marca la renovación "en trámite": el documento vale hasta DIAS_TRAMITE después del vencimiento */
+  tramite?: string
   /** Páginas oficiales donde se consulta con el DNI (tienen captcha: la consulta la hace una persona) */
   consultas?: { nombre: string; url: string }[]
 }
@@ -60,7 +62,7 @@ const habilitaciones = (sufijo = ''): Documento[] => [
 export const ENTIDADES: Entidad[] = [
   {
     clave: 'camiones', tabla: 'camiones', titulo: 'Camiones', singular: 'camión', nombre: 'patente', activo: 'activo',
-    ayuda: 'Con la VTV, la carga peligrosa o la ruta vencidas, el camión no puede salir con un manifiesto.',
+    ayuda: 'Con la VTV o la carga peligrosa vencidas, el camión no puede salir con un manifiesto.',
     select: '*, transportistas(nombre)', columnas: [{ k: 'transportistas', label: 'Transportista', ref: 'nombre' }, { k: 'tipo', label: 'Tipo' }],
     campos: [
       { k: 'patente', label: 'Patente', tipo: 'texto', req: true },
@@ -72,7 +74,6 @@ export const ENTIDADES: Entidad[] = [
     documentos: [
       { label: 'VTV', vto: 'vtv_vto', archivo: 'vtv_archivo' },
       { label: 'Carga peligrosa', nro: 'carga_pel_nro', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo' },
-      { label: 'Habilitación de ruta', vto: 'ruta_vto', archivo: 'ruta_archivo' },
     ],
   },
   {
@@ -84,7 +85,7 @@ export const ENTIDADES: Entidad[] = [
       { k: 'email', label: 'Mail', tipo: 'email', ayuda: 'Para pedirle los certificados nuevos. Si no tiene, el pedido va al mail del transportista.' }],
     documentos: [
       { label: 'Carnet de conducir', nro: 'carnet_nro', vto: 'carnet_vto', archivo: 'carnet_archivo' },
-      { label: 'Carga peligrosa (Seguridad Vial)', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo', lector: 'mmpp',
+      { label: 'Carga peligrosa (Seguridad Vial)', vto: 'carga_pel_vto', archivo: 'carga_pel_archivo', lector: 'mmpp', tramite: 'carga_pel_tramite',
         consultas: [{ nombre: 'Seguridad Vial', url: 'https://certificadommpp.seguridadvial.gob.ar/choferes' },
           { nombre: 'Curso FPT (Sicapro)', url: 'https://sicapro.com.ar/consultasonline.aspx' }] },
       { label: 'Psicofísico', vto: 'sep_vto', archivo: 'sep_archivo', lector: 'psicofisico',
@@ -105,7 +106,7 @@ export const ENTIDADES: Entidad[] = [
   },
   {
     clave: 'generadores', tabla: 'generadores', titulo: 'Generadores', singular: 'generador', nombre: 'nombre', activo: 'activo',
-    ayuda: 'La habilitación municipal del generador se controla al emitir el manifiesto.',
+    ayuda: 'La habilitación de generador se controla al emitir el manifiesto. El convenio vencido avisa, pero deja emitir.',
     select: '*, generadores_principales(nombre)', columnas: [{ k: 'cuit', label: 'CUIT' }, { k: 'ciudad', label: 'Ciudad' }],
     campos: [
       { k: 'nombre', label: 'Razón social', tipo: 'texto', req: true, ancho: 'doble' },
@@ -117,8 +118,8 @@ export const ENTIDADES: Entidad[] = [
       { k: 'celular', label: 'Celular', tipo: 'texto' },
     ],
     documentos: [
-      { label: 'Habilitación municipal', nro: 'hab_mun_nro', vto: 'hab_mun_vto', archivo: 'hab_mun_archivo' },
-      { label: 'Habilitación comercial', nro: 'hab_com_nro', vto: 'hab_com_vto', archivo: 'hab_com_archivo' },
+      { label: 'Habilitación de generador', nro: 'hab_mun_nro', vto: 'hab_mun_vto', archivo: 'hab_mun_archivo' },
+      { label: 'Convenio', vto: 'convenio_vto', archivo: 'convenio_archivo' },
     ],
     extras: ['direcciones'],
   },
@@ -157,6 +158,16 @@ export const entidad = (clave?: string) => ENTIDADES.find((e) => e.clave === cla
 
 export type EstadoDoc = 'vencido' | 'sin_cargar' | 'por_vencer' | 'vigente'
 const DIAS_AVISO = 45
+/** Días que sigue valiendo un documento vencido con la renovación en trámite */
+export const DIAS_TRAMITE = 30
+
+/** Hasta cuándo vale un documento: el vencimiento, o 30 días más si está en trámite */
+export function vigenteHasta(vto: string | null | undefined, enTramite?: unknown): string | null {
+  if (!vto) return null
+  if (!enTramite) return vto
+  const d = new Date(vto + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + DIAS_TRAMITE)
+  return d.toISOString().slice(0, 10)
+}
 
 export function estadoVto(vto: string | null | undefined, hoy = new Date().toISOString().slice(0, 10)): EstadoDoc {
   if (!vto) return 'sin_cargar'
@@ -169,7 +180,7 @@ export function estadoVto(vto: string | null | undefined, hoy = new Date().toISO
 export function estadoFicha(e: Entidad, fila: Record<string, unknown>): EstadoDoc | null {
   if (!e.documentos.length) return null
   const orden: EstadoDoc[] = ['vencido', 'sin_cargar', 'por_vencer', 'vigente']
-  const estados = e.documentos.map((d) => estadoVto(fila[d.vto] as string | null))
+  const estados = e.documentos.map((d) => estadoVto(vigenteHasta(fila[d.vto] as string | null, d.tramite && fila[d.tramite])))
   return orden.find((o) => estados.includes(o)) ?? 'vigente'
 }
 

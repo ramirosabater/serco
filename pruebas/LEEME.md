@@ -5,7 +5,7 @@ Abren el sistema en un navegador y recorren lo importante solas. En un par de mi
 | Prueba | Qué revisa |
 | --- | --- |
 | 01 Tablero | Que el tablero cargue los números y las etapas, que los filtros cambien los números y queden al recargar, y que abran la agenda y los vencimientos |
-| 02 Manifiesto | Emite un manifiesto de prueba, carga la sección 3, la corrige y lo anula. Y que estén "Corregir generador o dirección", "Salvar *" y "Anular" (sin usarlos) |
+| 02 Manifiesto | Emite un manifiesto de prueba, carga la sección 3, la corrige y lo anula. Que con SERCO solo esté "Emitir e imprimir", y que estén "Corregir generador o dirección", "Salvar *" (sin motivo) y "Anular" (sin usarlos) |
 | 03 Búsqueda | El filtro por etapa, abrir un manifiesto, y los filtros de la lista (planta, corriente) con la exportación a Excel |
 | 04 Planta | Por ingresar, armar carga, esperando certificado, Manifiestos Nación, imprimir el viaje en el formulario azul y su anexo (solo mira: no arma viajes) |
 | 05 Reportes y cliente | Los cinco reportes y la vista del cliente |
@@ -15,6 +15,7 @@ Abren el sistema en un navegador y recorren lo importante solas. En un par de mi
 | 09 Explicaciones | El "?" de los números del tablero y los reportes, y "Explicame el tablero / las estadísticas" (que encuentre cada cosa que explica) |
 | 10 Archivos | Subir un escaneo en una ficha y verlo (con el servidor de archivos simulado: no sube nada al Drive de Serco) |
 | 11 Certificados de Serco y libros | Reimprimir un certificado de Serco (original y duplicado) y los libros rubricados con número de registro (solo mira: no emite certificados) |
+| 12 Documentos | Cliente con habilitación de generador y convenio, camión sin ruta y carga peligrosa del chofer con "en trámite" (solo mira: no graba) |
 
 La prueba 02 usa siempre el transportista y el generador **PRUEBA AUTOMATICA**, con formulario rosa: no toca la numeración del formulario azul ni datos reales, y el manifiesto queda anulado al terminar (no cuenta en el tablero ni en los reportes).
 
@@ -37,7 +38,7 @@ En `C:\Apps\sgrp2\pruebas`:
 npm.cmd run probar
 ```
 
-- Todo bien: termina con `37 passed`.
+- Todo bien: termina con `40 passed`.
 - Si algo falla, dice cuál prueba y por qué. Para ver la captura y el paso a paso: `npm.cmd run informe`.
 - Para mirar cómo trabaja el navegador: `npm.cmd run ver`.
 
