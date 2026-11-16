@@ -30,7 +30,7 @@ async function avisarCertificados(db: SupabaseClient) {
       <td style="padding:6px 8px;border-bottom:1px solid #DDE7DA">${fd(c.fecha)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #DDE7DA">${esc(c.operador ?? '')}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #DDE7DA">${esc(c.manifiestos.split(', ').map(fnum).join(', '))}</td></tr>`).join('')
-    const url = env('APP_URL', 'https://serco.netlify.app') + '/portal/certificados'
+    const url = env('APP_URL', 'https://sercosa.netlify.app') + '/portal/certificados'
     const cuerpo = `<p>Hola, ${esc(certs[0].generador)}:</p>
       <p>${certs.length === 1 ? 'Ya está disponible el certificado de disposición final' : `Ya están disponibles ${certs.length} certificados de disposición final`} de residuos que retiramos de su empresa.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;border-collapse:collapse;margin:8px 0 16px">
@@ -87,7 +87,7 @@ async function avisarVencimientos(db: SupabaseClient, forzarResumen: boolean) {
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;border-collapse:collapse;margin:8px 0 16px">
     <tr style="color:#5F6F62;text-align:left"><th style="padding:5px 8px">Qué</th><th style="padding:5px 8px">Nombre</th><th style="padding:5px 8px">Documento</th><th style="padding:5px 8px">Vence</th><th style="padding:5px 8px">Estado</th></tr>${filas}</table>
     ${extra ? `<p style="color:#5F6F62">Además: ${extra}. Están todos en la pantalla de vencimientos.</p>` : ''}
-    <p><a href="${env('APP_URL', 'https://serco.netlify.app')}/vencimientos" style="color:#0B8A22;font-weight:bold">Actualizar en el sistema</a></p>`
+    <p><a href="${env('APP_URL', 'https://sercosa.netlify.app')}/vencimientos" style="color:#0B8A22;font-weight:bold">Actualizar en el sistema</a></p>`
   const ok = await enviarMail(db, 'vencimientos', para, asunto, plantilla(asunto, cuerpo))
   return { vencimientos: ok ? `enviado (${lista.length} detallados${sinCargar ? `, ${sinCargar} sin cargar` : ''})` : 'falló el envío' }
 }
@@ -121,7 +121,7 @@ async function reporteProducto(db: SupabaseClient, forzar: boolean) {
     <tr style="color:#5F6F62;text-align:left"><th style="padding:6px 8px">Corriente</th><th style="padding:6px 8px;text-align:right">Kilos</th><th style="padding:6px 8px;text-align:right">Litros</th><th style="padding:6px 8px;text-align:right">Retiros</th></tr>
     ${lista.map(([c, x]) => `<tr><td style="${td}"><b>${esc(c)}</b> <span style="color:#5F6F62">${esc(x.d.slice(0, 50))}</span></td><td style="${td};text-align:right">${x.KGS ? nf.format(x.KGS) : ''}</td><td style="${td};text-align:right">${x.LTS ? nf.format(x.LTS) : ''}</td><td style="${td};text-align:right">${x.n}</td></tr>`).join('')}
     <tr><td style="${td}"><b>Total</b></td><td style="${td};text-align:right"><b>${nf.format(tot.KGS)}</b></td><td style="${td};text-align:right"><b>${tot.LTS ? nf.format(tot.LTS) : ''}</b></td><td style="${td}"></td></tr></table>
-    <p><a href="${env('APP_URL', 'https://serco.netlify.app')}/reportes/producto">Ver el reporte completo</a></p>`
+    <p><a href="${env('APP_URL', 'https://sercosa.netlify.app')}/reportes/producto">Ver el reporte completo</a></p>`
     : `<p>No hubo retiros entre el ${fd(desde)} y el ${fd(hasta)}.</p>`
   const asunto = `Cantidad transportada por producto · semana del ${fd(desde)}`
   const ok = await enviarMail(db, 'reporte_producto', para, asunto, plantilla(asunto, cuerpo))

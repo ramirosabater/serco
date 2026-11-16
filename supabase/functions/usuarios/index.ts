@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
 
   const db = admin()
   const { data, error } = await db.auth.admin.inviteUserByEmail(email, {
-    redirectTo: env('APP_URL', 'https://serco.netlify.app') + '/elegir-clave',
+    redirectTo: env('APP_URL', 'https://sercosa.netlify.app') + '/elegir-clave',
     data: { nombre },
   })
   if (error || !data.user) {

@@ -80,6 +80,7 @@ function Usuarios() {
     if (error || msg?.error) {
       let detalle = msg?.error ?? ''
       try { detalle ||= (await (error as { context?: Response }).context?.json())?.error } catch { /* sin detalle */ }
+      if (!detalle && error && /Failed to send|fetch/i.test(error.message)) detalle = 'No se pudo llegar a la función "usuarios" de Supabase: falta publicarla (ver puesta-en-marcha/AVISOS.md).'
       setError(detalle || mensajeError(error)); return
     }
     setOk(msg?.mensaje ?? 'Invitación enviada.'); setForm({ email: '', nombre: '', rol: 'operador' }); setGens([]); cargar()
