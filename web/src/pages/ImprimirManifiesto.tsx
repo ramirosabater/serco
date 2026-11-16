@@ -15,6 +15,8 @@ import { instruccionesPorDefecto } from '../lib/instrucciones'
 
 interface Datos {
   id: number; numero: string; fecha: string; tipo: 'azul' | 'rosa'; anulado: boolean; direccion_retiro: string | null; instrucciones: Instrucciones | null
+  /** Corrientes elegidas al emitir (paso 1) */
+  residuos_previstos?: { corriente_id: number; um: UM }[] | null
   generadores: { nombre: string; cuit: string | null; ciudad: string | null; hab_mun_nro: string | null; hab_mun_vto: string | null } | null
   generadores_principales: { nombre: string; cuit: string | null; hab_pro_nro: string | null; hab_pro_vto: string | null } | null
   transportistas: { nombre: string; hab_pro_vto: string | null } | null
@@ -24,7 +26,7 @@ interface Datos {
     corrientes: { codigo: string; descripcion: string | null; estado_fisico: string | null } | null }[]
 }
 
-const SELECT = `id, numero, fecha, tipo, anulado, direccion_retiro, instrucciones,
+const SELECT = `id, numero, fecha, tipo, anulado, direccion_retiro, instrucciones, residuos_previstos,
   generadores(nombre, cuit, ciudad, hab_mun_nro, hab_mun_vto),
   generadores_principales(nombre, cuit, hab_pro_nro, hab_pro_vto),
   transportistas(nombre, hab_pro_vto),
@@ -97,6 +99,8 @@ const leerCalib = (): Calib => { try { return JSON.parse(localStorage.getItem('s
 export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean }) {
   const { id } = useParams()
   const [m, setM] = useState<Datos | null>(null)
+  // Corrientes de lo previsto al emitir (descripción y estado físico para la sección 3)
+  const [corrPrev, setCorrPrev] = useState<Record<number, { codigo: string; descripcion: string | null; estado_fisico: string | null }>>({})
   const [p, setP] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [calib, setCalib] = useState<Calib>(leerCalib)
@@ -116,6 +120,13 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
       .then(({ data }) => setP(Object.fromEntries((data ?? []).map((x) => [x.clave, x.valor]))))
   }, [id, viaje])
 
+  useEffect(() => {
+    const ids = (m?.residuos_previstos ?? []).map((x) => x.corriente_id)
+    if (!ids.length) return
+    supabase.from('corrientes').select('id, codigo, descripcion, estado_fisico').in('id', ids)
+      .then(({ data }) => setCorrPrev(Object.fromEntries((data ?? []).map((c) => [c.id, c]))))
+  }, [m])
+
   useEffect(() => { try { localStorage.setItem('sgrp-calib-azul', JSON.stringify(calib)) } catch { /* sin almacenamiento */ } }, [calib])
   useEffect(() => { document.body.classList.add('modo-formulario'); return () => document.body.classList.remove('modo-formulario') }, [])
 
@@ -133,13 +144,22 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
 
   const g = m.generadores, op = m.generadores_principales, ca = m.camiones, ch = m.choferes
   const d = fd(m.fecha)
-  const items = m.manifiesto_items
+  // Con los residuos cargados en planta se imprime lo cargado; antes, lo previsto al emitir (sin cantidades ni contenedor)
+  const prev = (m.residuos_previstos ?? [])
+  const hayPrev = prev.length > 0
+  const items: (Omit<Datos['manifiesto_items'][number], 'cantidad'> & { cantidad: number | null })[] = m.manifiesto_items.length ? m.manifiesto_items
+    : prev.map((x, k) => ({ id: -k - 1, contenedor: null, cant_estimada: null, cantidad: null, um: x.um, corrientes: corrPrev[x.corriente_id] ?? null }))
+  const cargados = m.manifiesto_items.length > 0
   const lineas = items.map((i) => cortar(i.corrientes?.descripcion ?? '', 18))
   const unaLinea = lineas.reduce((a, l) => a + l.length, 0) > RENGLONES
   // Bloque 4: las del manifiesto; si no tiene (los del Access), las de Configuración → Parámetros
   const ins = m.instrucciones ?? instruccionesPorDefecto(p)
-  const parte = que || (items.length ? 'todo' : 'sin3')
+  const parte = que || (cargados ? 'todo' : 'sin3')
   const con3 = parte !== 'sin3', conResto = parte !== '3'
+  // Sección 3: descripción, U.M., estado físico y corriente salen al emitir si se eligieron ahí (si no, con la sección 3);
+  // contenedor y cantidades, solo cuando ya se cargaron en planta
+  const colsCorriente = parte === 'todo' || (parte === 'sin3' ? hayPrev : !hayPrev)
+  const colsMano = cargados && parte !== 'sin3'
 
   const filas: ReactNode[] = []
   let r = 0
@@ -148,14 +168,15 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
     desc.forEach((ln, kk) => {
       if (r >= RENGLONES) return
       const y = 117.8 + r * 4.2
-      if (kk === 0) filas.push(
+      if (kk === 0 && colsMano) filas.push(
         <F key={`t${k}`} x={18} y={y} w={15.5} t={i.contenedor ?? (i.um === 'LTS' ? 'Cisterna' : '')} c="sm" />,
         <F key={`e${k}`} x={36} y={y} w={25} t={i.cant_estimada != null ? num(i.cant_estimada) : ''} />,
-        <F key={`q${k}`} x={64.5} y={y} w={19.5} t={num(i.cantidad)} />,
+        <F key={`q${k}`} x={64.5} y={y} w={19.5} t={i.cantidad != null ? num(i.cantidad) : ''} />)
+      if (kk === 0 && colsCorriente) filas.push(
         <F key={`u${k}`} x={112.5} y={y} w={22} t={umL(i.um)} />,
         <F key={`f${k}`} x={136} y={y} w={26} t={i.corrientes?.estado_fisico ?? ''} c="sm" />,
         <F key={`c${k}`} x={163.5} y={y} w={29} t={i.corrientes?.codigo} />)
-      filas.push(<F key={`d${k}-${kk}`} x={85.5} y={y} w={26} t={ln} c={unaLinea ? 'xs' : 'sm'} />)
+      if (colsCorriente) filas.push(<F key={`d${k}-${kk}`} x={85.5} y={y} w={26} t={ln} c={unaLinea ? 'xs' : 'sm'} />)
       r++
     })
   })
@@ -183,7 +204,7 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
       <F x={160} y={98.2} w={32} t={ch?.carga_pel_vto ? fd(ch.carga_pel_vto) : ''} />
       </>}
       {/* 3. Residuos */}
-      {con3 && filas}
+      {filas}
       {conResto && <>
       {/* 4. Instrucciones de manipulación */}
       <F x={67} y={158} w={40} t={ins.inhalacion} />
@@ -209,6 +230,7 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
   const hoja: CSSProperties = { transform: `scale(${escala})`, transformOrigin: 'top left' }
   const avisos = [
     con3 && !items.length && 'Todavía no se cargaron los residuos (sección 3): esa parte sale en blanco.',
+    parte === 'sin3' && !hayPrev && !cargados && 'Al emitir no se eligió la corriente: la sección 3 sale en blanco.',
     con3 && items.length > RENGLONES && `El ${viaje ? 'viaje' : 'manifiesto'} tiene ${items.length} ${viaje ? 'corrientes' : 'residuos'} y el formulario tiene ${RENGLONES} renglones: se imprimen los primeros ${RENGLONES}. El resto va en un segundo formulario.`,
     !g && viaje && 'El viaje no tiene planta de salida cargada: el renglón del generador sale en blanco.',
     !op && viaje && 'El viaje no tiene operador cargado.',
@@ -241,8 +263,8 @@ export default function ImprimirManifiesto({ viaje = false }: { viaje?: boolean 
           <p className="small muted" style={{ margin: 0 }}>Poné el formulario azul en la bandeja. Imprimí en A4, a escala 100 % y sin márgenes.</p>
           <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 4 }} data-ayuda="imp-que">
             <legend className="small muted" style={{ marginBottom: 4 }}>Qué imprimir</legend>
-            <label className="small"><input type="radio" name="que" checked={parte === 'sin3'} onChange={() => setQue('sin3')} /> Al emitir: secciones 1, 2, 4 y 5</label>
-            <label className="small"><input type="radio" name="que" checked={parte === '3'} onChange={() => setQue('3')} disabled={!items.length} /> Al entrar a planta: solo la sección 3 (residuos)</label>
+            <label className="small"><input type="radio" name="que" checked={parte === 'sin3'} onChange={() => setQue('sin3')} /> Al emitir: secciones 1, 2, 4 y 5{hayPrev ? ', y en la 3 la corriente' : ''}</label>
+            <label className="small"><input type="radio" name="que" checked={parte === '3'} onChange={() => setQue('3')} disabled={!cargados} /> Al entrar a planta: solo la sección 3{hayPrev ? ' (contenedor y cantidades)' : ' (residuos)'}</label>
             <label className="small"><input type="radio" name="que" checked={parte === 'todo'} onChange={() => setQue('todo')} /> Todo el formulario</label>
           </fieldset>
           {avisos.length > 0 && <div className="aviso haz small"><ul style={{ margin: 0, paddingLeft: 18 }}>{avisos.map((a) => <li key={a}>{a}</li>)}</ul></div>}

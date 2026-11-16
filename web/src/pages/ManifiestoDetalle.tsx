@@ -248,6 +248,8 @@ function CargaResiduos({ m, esAdmin, corrigiendo, onListo, onCancelar }: { m: Ma
   const [corrientes, setCorrientes] = useState<Corriente[]>([])
   const [renglones, setRenglones] = useState<Renglon[]>(() => (m.manifiesto_items ?? []).length
     ? m.manifiesto_items!.map((i) => ({ corriente_id: String(i.corriente_id), contenedor: i.contenedor ?? '', estimada: i.cant_estimada != null ? coma(i.cant_estimada) : '', cantidad: coma(i.cantidad), um: i.um }))
+    // las corrientes elegidas al emitir ya vienen puestas: falta el contenedor y la cantidad real
+    : (m.residuos_previstos ?? []).length ? m.residuos_previstos!.map((x) => ({ ...renglonVacio(), corriente_id: String(x.corriente_id), um: x.um }))
     : [renglonVacio()])
   const [ingreso, setIngreso] = useState(m.ingreso_planta ?? hoy())
   const [error, setError] = useState('')

@@ -42,6 +42,8 @@ export interface Manifiesto {
   etapa?: number
   creado?: string
   ingreso_planta?: string | null
+  /** Corrientes elegidas al emitir (paso 1): se imprimen en la sección 3 y se cargan al entrar a planta */
+  residuos_previstos?: { corriente_id: number; um: UM }[] | null
   generadores?: { id: number; nombre: string; cuit: string | null } | null
   generadores_principales?: { nombre: string } | null
   transportistas?: { id: number; nombre: string } | null

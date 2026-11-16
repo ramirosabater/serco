@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { traerTodo } from '../lib/paginar'
 import { supabase, mensajeError } from '../lib/supabase'
 import { fd, fnum, hoy } from '../lib/formato'
-import type { Instrucciones } from '../lib/tipos'
+import type { Instrucciones, UM } from '../lib/tipos'
 import { INSTRUCTIVOS, instruccionesPorDefecto, NIVELES, PELIGROS } from '../lib/instrucciones'
 import { useAuth } from '../auth/AuthProvider'
 import { vigenteHasta } from '../lib/altas'
+
+interface CorrienteSec3 { id: number; codigo: string; descripcion: string | null; um: UM | null; estado_fisico: string | null }
 
 interface Transp { id: number; nombre: string; emite_manifiestos: boolean }
 interface Gen { id: number; nombre: string; cuit: string | null; generador_principal_id: number | null; hab_mun_vto: string | null; actividad: string | null }
@@ -49,6 +51,9 @@ export default function NuevoManifiesto() {
   const [enviando, setEnviando] = useState(false)
   const [instr, setInstr] = useState<Instrucciones>(() => instruccionesPorDefecto({}))
   const [imprimir, setImprimir] = useState(false)
+  // Sección 3 al emitir: solo la corriente (descripción, unidad y estado físico se completan solos)
+  const [corrientes, setCorrientes] = useState<CorrienteSec3[]>([])
+  const [previstos, setPrevistos] = useState<{ corriente_id: string; um: UM }[]>([{ corriente_id: '', um: 'KGS' }])
 
   // "Como siempre": chofer y camión a aplicar cuando termine de cambiar el transportista
   const aplicar = useRef<{ t: string; chofer?: string; camion?: string } | null>(null)
@@ -129,6 +134,12 @@ export default function NuevoManifiesto() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generador])
 
+  useEffect(() => {
+    supabase.from('corrientes').select('id, codigo, descripcion, um, estado_fisico').eq('activa', true).order('codigo')
+      .then(({ data }) => setCorrientes((data ?? []) as CorrienteSec3[]))
+  }, [])
+  const setPrevisto = (k: number, c: Partial<{ corriente_id: string; um: UM }>) => setPrevistos((l) => l.map((x, i) => (i === k ? { ...x, ...c } : x)))
+
   // Validación en vivo con la misma regla que aplica la base al emitir
   useEffect(() => {
     if (!esAzul || !transportista || !generador || !chofer || !camion) { setProblemas([]); return }
@@ -143,6 +154,8 @@ export default function NuevoManifiesto() {
     e.preventDefault()
     setError('')
     if (!generador) { setError('Elegí el generador de la lista.'); return }
+    const elegidos = previstos.filter((x) => x.corriente_id)
+    if (esAzul && !elegidos.length) { setError('Elegí la corriente de al menos un residuo (sección 3).'); return }
     setEnviando(true)
     const { data, error } = await supabase.rpc('emitir_manifiesto', {
       p: {
@@ -152,6 +165,7 @@ export default function NuevoManifiesto() {
         validacion_omitida: problemas.length && forzar ? motivo.trim() : null,
         instrucciones: esAzul ? instr : null,
         items: [],
+        previstos: elegidos.map((x) => ({ corriente_id: Number(x.corriente_id), um: x.um })),
       },
     })
     setEnviando(false)
@@ -255,8 +269,29 @@ export default function NuevoManifiesto() {
       </div>}
 
       <div className="card stack mt" data-ayuda="nm-residuos">
-        <h2 className="paso-h"><span className="sn">{esAzul ? 4 : 3}</span>Residuos: se cargan al entrar a planta <small className="muted">· sección 3</small></h2>
-        <p className="muted small" style={{ margin: 0 }}>El manifiesto queda <b>Iniciado</b>. La sección 3 (corriente, contenedor y cantidad) se completa cuando la carga llega a planta, desde <b>Planta → Por ingresar</b> o desde el mismo manifiesto. Ahí pasa a <b>Almacenado</b>.</p>
+        <h2 className="paso-h"><span className="sn">{esAzul ? 4 : 3}</span>Residuos <small className="muted">· sección 3</small></h2>
+        <p className="muted small" style={{ margin: 0 }}>Elegí la <b>corriente</b> de cada residuo: la descripción, la unidad y el estado físico se completan solos y salen impresos.
+          El <b>tipo de contenedor</b> y la <b>cantidad real</b> se escriben a mano en el formulario y se cargan al entrar a planta (paso 2), donde el manifiesto pasa a <b>Almacenado</b>.</p>
+        <div className="tw"><table className="tabla-sec3">
+          <thead><tr><th style={{ width: '24%' }}>Corriente{esAzul && ' *'}</th><th>Descripción</th><th style={{ width: 120 }}>U.M.</th><th style={{ width: 130 }}>Estado físico</th><th style={{ width: 80 }} /></tr></thead>
+          <tbody>{previstos.map((x, k) => {
+            const c = corrientes.find((y) => String(y.id) === x.corriente_id)
+            return (
+              <tr key={k}>
+                <td><select value={x.corriente_id} aria-label={`Corriente del residuo ${k + 1}`} style={{ width: '100%' }}
+                  onChange={(e) => { const n = corrientes.find((y) => String(y.id) === e.target.value); setPrevisto(k, { corriente_id: e.target.value, um: n?.um ?? x.um }) }}>
+                  <option value="">Elegí la corriente</option>
+                  {corrientes.map((y) => <option key={y.id} value={y.id}>{y.codigo}</option>)}
+                </select></td>
+                <td className="small">{c?.descripcion ?? <span className="muted">Se completa al elegir la corriente</span>}</td>
+                <td><select value={x.um} onChange={(e) => setPrevisto(k, { um: e.target.value as UM })} aria-label={`Unidad del residuo ${k + 1}`} disabled={!c}>
+                  <option value="KGS">kg</option><option value="LTS">litros</option><option value="MS3">m³</option></select></td>
+                <td className="small">{c?.estado_fisico ?? ''}</td>
+                <td>{previstos.length > 1 && <button type="button" className="link" onClick={() => setPrevistos((l) => l.filter((_, i) => i !== k))}>Quitar</button>}</td>
+              </tr>)
+          })}</tbody>
+        </table></div>
+        <div><button type="button" onClick={() => setPrevistos((l) => [...l, { corriente_id: '', um: 'KGS' }])} disabled={previstos.length >= 7}>Agregar otra corriente</button></div>
         <label className="campo">Nota (opcional)
           <textarea value={nota} onChange={(e) => setNota(e.target.value)} />
         </label>

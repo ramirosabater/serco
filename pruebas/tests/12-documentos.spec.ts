@@ -29,3 +29,16 @@ test('chofer: la carga peligrosa se puede marcar en trámite (30 días más)', a
   await expect(fila.getByLabel(/En trámite \(30 días más\)/)).toBeVisible()
   await expect(page.locator('[data-ayuda="ficha-vtos"] tr', { hasText: 'Carnet de conducir' }).getByLabel(/En trámite/)).toHaveCount(0)
 })
+
+test('emitir: al elegir la corriente se completan descripción, unidad y estado físico (sin emitir)', async ({ page }) => {
+  await page.goto('/manifiestos/nuevo')
+  const sec3 = page.locator('[data-ayuda="nm-residuos"]')
+  await expect(sec3.getByText('Se completa al elegir la corriente')).toBeVisible()
+  const corriente = sec3.getByLabel('Corriente del residuo 1')
+  await expect(corriente.locator('option')).not.toHaveCount(1)          // hay corrientes para elegir
+  await corriente.selectOption({ index: 1 })
+  await expect(sec3.getByText('Se completa al elegir la corriente')).toHaveCount(0)
+  await expect(sec3.getByLabel('Unidad del residuo 1')).toBeEnabled()
+  await sec3.getByRole('button', { name: 'Agregar otra corriente' }).click()
+  await expect(sec3.getByLabel('Corriente del residuo 2')).toBeVisible()
+})

@@ -59,7 +59,7 @@ export const CIRCUITOS: Circuito[] = [
     pasos: [
       { ir: '/', foco: 'tab-etapas', titulo: 'Cinco etapas', texto: '¡Hola! Cada manifiesto pasa por cinco etapas: iniciado, almacenado, en tránsito, dispuesto y certificado entregado. Vení que te muestro dónde se hace cada una.' },
       { ir: '/manifiestos/nuevo', foco: 'nm-formulario', titulo: 'Iniciado: se emite', texto: 'Todo arranca acá. Cargás el generador, el transportista, el camión, el chofer y las instrucciones, y lo imprimís sobre el formulario azul.' },
-      { foco: 'nm-residuos', titulo: 'Los residuos, después', texto: 'Fijate que los residuos no se cargan al emitir: se completan cuando la carga entra a planta, con lo que llegó de verdad.' },
+      { foco: 'nm-residuos', titulo: 'La corriente al emitir', texto: 'Al emitir se elige la corriente de cada residuo: la descripción, la unidad y el estado físico se completan solos. El contenedor y la cantidad real se cargan cuando la carga entra a planta, con lo que llegó de verdad.' },
       { ir: '/planta?v=ingresar', foco: 'pl-ingresar', titulo: 'Almacenado: entra a planta', texto: 'Cuando llega el camión, desde acá cargás la sección tres: corriente, contenedor y cantidades. Desde ese día cuenta el plazo en planta.' },
       { ir: '/planta', foco: 'pl-plan', titulo: 'En tránsito: el viaje', texto: 'Con lo almacenado, el sistema te propone los viajes según el vencimiento, el peso y el destino. Al armar uno se emite el Manifiesto Nación.' },
       { ir: '/planta?v=transito', foco: 'pl-esperando', titulo: 'Dispuesto: vuelve el certificado', texto: 'Cuando el operador manda el certificado de disposición final, lo registrás acá con su PDF.' },
@@ -85,7 +85,7 @@ export const CIRCUITOS: Circuito[] = [
       { foco: 'nm-generador', titulo: 'Generador', texto: 'Escribí el nombre o el CUIT y elegilo de la lista. Después, la dirección de retiro.' },
       { foco: 'nm-flota', titulo: 'Camión y chofer', texto: 'Si el camión, el chofer o el generador tienen algo vencido, aparece en rojo y no te deja emitir. Se arregla en Vencimientos.' },
       { foco: 'nm-instrucciones', titulo: 'Instrucciones', texto: 'Las instrucciones vienen con los valores de siempre. Cambialas solo si este retiro es distinto.', falta: 'Esta parte aparece solo con el formulario azul de Serco.' },
-      { foco: 'nm-residuos', titulo: 'Residuos: después', texto: 'Los residuos no se cargan ahora: se cargan cuando la carga entra a planta.' },
+      { foco: 'nm-residuos', titulo: 'Residuos', texto: 'Elegí la corriente y se completan la descripción, la unidad y el estado físico. El contenedor y la cantidad real se escriben a mano y se cargan al entrar a planta.' },
       { foco: 'nm-emitir', titulo: 'Emitir e imprimir', texto: 'Con "Emitir e imprimir" queda iniciado y se abre la impresión: salen las secciones uno, dos, cuatro y cinco sobre el formulario azul.' },
     ],
   },
