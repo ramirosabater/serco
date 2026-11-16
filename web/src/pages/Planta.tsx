@@ -34,9 +34,9 @@ export default function Planta() {
       <h1>Planta</h1>
       <p className="sub">Registrá lo que entra (sección 3), armá la carga a disposición final con lo almacenado y registrá el certificado cuando vuelve.</p>
       <nav className="bar" aria-label="Planta" style={{ marginBottom: 18 }}>
-        <a href="?v=ingresar" data-ayuda="pl-tab-ingresar" className={`subnav ${vista === 'ingresar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'ingresar' }) }}>Por ingresar</a>
-        <a href="?v=armar" className={`subnav ${vista === 'armar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({}) }}>Armar carga</a>
-        <a href="?v=transito" data-ayuda="pl-tab-transito" className={`subnav ${vista === 'transito' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'transito' }) }}>Esperando certificado</a>
+        <a href="?v=ingresar" data-ayuda="pl-tab-ingresar" className={`subnav ${vista === 'ingresar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'ingresar' }) }}>2 · Por ingresar</a>
+        <a href="?v=armar" className={`subnav ${vista === 'armar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({}) }}>3 · Armar carga</a>
+        <a href="?v=transito" data-ayuda="pl-tab-transito" className={`subnav ${vista === 'transito' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'transito' }) }}>4 · Esperando certificado</a>
         <a href="?v=nacion" data-ayuda="pl-tab-nacion" className={`subnav ${vista === 'nacion' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setSp({ v: 'nacion' }) }}>Todos los Manifiestos Nación</a>
       </nav>
       {vista === 'ingresar' ? <PorIngresar /> : vista === 'armar' ? <ArmarCarga /> : vista === 'transito' ? <EnTransitoLista /> : <NacionLista />}

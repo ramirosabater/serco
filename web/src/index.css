@@ -601,3 +601,13 @@ h2 .explica, .titulo-explica .explica { margin-left: 8px; vertical-align: middle
 @media print { body.modo-certificado .cert-hoja.libre { height: auto; overflow: visible; } body.modo-certificado .cert-hoja.libre .cert-tabla tr { break-inside: avoid; } body.modo-certificado .cert-hoja.libre .cert-tabla thead { display: table-header-group; } }
 .cert-tabla .cert-total td { border-top: 1.5px solid #1d3d8f; border-bottom: 0; padding-top: 2mm; }
 .salvado { color: var(--haz, #b45309); font-weight: 800; cursor: help; }
+
+/* Menú: el circuito de un residuo, paso a paso */
+nav.menu .circuito { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: var(--acc-soft); flex-wrap: wrap; }
+nav.menu .circuito a.paso { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+nav.menu .circuito a.paso:hover { background: var(--card); }
+nav.menu .circuito a.paso.active { background: var(--acc); color: var(--on-acc); }
+nav.menu .circuito .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--acc); color: var(--on-acc); font-size: 12px; font-weight: 800; flex: none; }
+nav.menu .circuito a.paso.active .num { background: var(--on-acc); color: var(--acc); }
+nav.menu .circuito a.paso.active .badge { background: var(--on-acc); color: var(--acc); }
+@media (max-width: 1100px) { nav.menu .circuito { border-radius: 14px; } }

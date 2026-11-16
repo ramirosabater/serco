@@ -23,7 +23,7 @@ jobs:
       PRUEBA_EMAIL: ${{ secrets.PRUEBA_EMAIL }}
       PRUEBA_CLAVE: ${{ secrets.PRUEBA_CLAVE }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -51,7 +51,7 @@ jobs:
           echo "::error::Netlify no publicó esta versión en 20 minutos. Revisá el deploy en Netlify."
           exit 1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -69,7 +69,7 @@ jobs:
 
       - name: Guardar el informe (capturas y paso a paso)
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: informe
           path: |
