@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { supabase, mensajeError, invocar } from '../lib/supabase'
 import type { Rol } from '../lib/tipos'
 import { useAuth } from '../auth/AuthProvider'
+import SubmenuConfiguracion from '../components/SubmenuConfiguracion'
 
 interface PerfilFila { id: string; nombre: string; email: string | null; rol: Rol; activo: boolean; perfil_generadores: { generador_id: number; generadores: { nombre: string } | null }[] }
 interface Gen { id: number; nombre: string; cuit: string | null }
@@ -266,6 +267,7 @@ export default function Configuracion() {
   return (
     <>
       <h1>Configuración</h1>
+      <SubmenuConfiguracion />
       <p className="sub">Usuarios, avisos por mail y parámetros del sistema.</p>
       <Usuarios />
       <Avisos />

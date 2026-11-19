@@ -100,6 +100,7 @@ export default function Layout() {
       { to: '/altas/transportistas', b: 'Transportistas y operadores', s: 'Empresas habilitadas y sus corrientes' },
       { to: '/altas/corrientes', b: 'Corrientes y plantas', s: 'Códigos Y, estado físico, plantas' },
       { to: '/configuracion', b: 'Configuración', s: 'Usuarios, avisos por mail y parámetros', admin: true },
+      { to: '/configuracion/logs', b: 'Logs del sistema', s: 'Quién cambió qué y cuándo', admin: true },
     ] },
   ]
   const enPaso = pasos.some((p) => p.activo(pathname, v))

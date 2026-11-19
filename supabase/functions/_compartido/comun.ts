@@ -16,7 +16,7 @@ export const admin = (): SupabaseClient =>
   createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } })
 
 /** Quién llama: 'servicio' (la tarea programada), el perfil del usuario, o null si no está autorizado */
-export async function quienLlama(req: Request): Promise<{ tipo: 'servicio' } | { tipo: 'usuario'; id: string; rol: string } | null> {
+export async function quienLlama(req: Request): Promise<{ tipo: 'servicio' } | { tipo: 'usuario'; id: string; rol: string; email: string | null } | null> {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
   if (!token) return null
   if (token === env('SUPABASE_SERVICE_ROLE_KEY')) return { tipo: 'servicio' }
@@ -25,7 +25,7 @@ export async function quienLlama(req: Request): Promise<{ tipo: 'servicio' } | {
   if (error || !data.user) return null
   const { data: p } = await db.from('perfiles').select('rol, activo').eq('id', data.user.id).maybeSingle()
   if (!p || !p.activo) return null
-  return { tipo: 'usuario', id: data.user.id, rol: p.rol }
+  return { tipo: 'usuario', id: data.user.id, rol: p.rol, email: data.user.email ?? null }
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)

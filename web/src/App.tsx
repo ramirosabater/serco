@@ -14,6 +14,7 @@ import Etiquetas from './pages/Etiquetas'
 import Agenda from './pages/Agenda'
 import NacionDetalle from './pages/NacionDetalle'
 import Configuracion from './pages/Configuracion'
+import Logs from './pages/Logs'
 import { PortalRetiros, PortalCertificados } from './pages/Portal'
 import ElegirClave from './auth/ElegirClave'
 import SubirCertificado from './pages/SubirCertificado'
@@ -76,6 +77,7 @@ function Rutas() {
         <Route path="altas/:entidad" element={<AltasLista />} />
         <Route path="altas/:entidad/:id" element={<AltasFicha />} />
         <Route path="configuracion" element={<Configuracion />} />
+        <Route path="configuracion/logs" element={<Logs />} />
         <Route path="*" element={<p>No existe esta página. <Link to="/">Ir al tablero</Link></p>} />
       </Route>
     </Routes>

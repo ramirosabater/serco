@@ -16,6 +16,7 @@ Abren el sistema en un navegador y recorren lo importante solas. En un par de mi
 | 10 Archivos | Subir un escaneo en una ficha y verlo (con el servidor de archivos simulado: no sube nada al Drive de Serco) |
 | 11 Certificados de Serco y libros | Reimprimir un certificado de Serco (original y duplicado) y los libros rubricados con número de registro (solo mira: no emite certificados) |
 | 12 Documentos | Cliente con habilitación de generador y convenio, camión sin ruta y carga peligrosa del chofer con "en trámite", y en Emitir que al elegir la corriente se complete la sección 3 (solo mira: no graba) |
+| 13 Logs | Que los logs del sistema sean solo para administradores (el usuario de pruebas es operador: no los ve) |
 
 La prueba 02 usa siempre el transportista y el generador **PRUEBA AUTOMATICA**, con formulario rosa: no toca la numeración del formulario azul ni datos reales, y el manifiesto queda anulado al terminar (no cuenta en el tablero ni en los reportes).
 
@@ -38,7 +39,7 @@ En `C:\Apps\sgrp2\pruebas`:
 npm.cmd run probar
 ```
 
-- Todo bien: termina con `41 passed`.
+- Todo bien: termina con `42 passed`.
 - Si algo falla, dice cuál prueba y por qué. Para ver la captura y el paso a paso: `npm.cmd run informe`.
 - Para mirar cómo trabaja el navegador: `npm.cmd run ver`.
 
